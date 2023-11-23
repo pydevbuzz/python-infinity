@@ -2394,7 +2394,7 @@ class RestClient:
             dict_query_params.update({constants.QUERY_KEY_MARKET_ID: market_id})
 
         if start_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_START: market_id})
+            dict_query_params.update({constants.QUERY_KEY_START_ID: start_id})
 
         if limit is not None:
             dict_query_params.update({constants.QUERY_KEY_LIMIT: limit})
@@ -2481,7 +2481,7 @@ class RestClient:
             dict_query_params.update({constants.QUERY_KEY_MARKET_ID: market_id})
 
         if start_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_START: market_id})
+            dict_query_params.update({constants.QUERY_KEY_START_ID: market_id})
 
         if limit is not None:
             dict_query_params.update({constants.QUERY_KEY_LIMIT: limit})
