@@ -262,7 +262,7 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_withdraw_status(self, request_ids: list) -> dict:
+    def get_withdraw_status(self, request_ids: list[int]) -> dict:
         """Get fund withdrawal request status (for given list of request IDs).
         Args:
            request_ids (list): List of Fund Withdrawal Request IDs, e.g. ["123", "456"]
@@ -277,7 +277,9 @@ class RestClient:
                }
            }
         """
-
+        if len(request_ids) == 0:
+            self._logger.error("get_withdraw_status request_ids cannot be empty.")
+            return {}
         url = self._API_BASE_URL + constants.PRIVATE_GET_WITHDRAW_STATUS_ENDPOINT
         dict_query_params = {constants.QUERY_KEY_REQUEST_IDS: request_ids}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
@@ -402,12 +404,12 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_market_summaries(self, token_id: int, fixed_rate_market_ids: list = None,
-                             min_bid_ask_size: int = 0) -> dict:
+    def get_market_summaries(self, token_id: int, fixed_rate_instrument_ids: list[str] = None,
+                             min_bid_ask_size: int = None) -> dict:
         """ Get orderbook summary by token id.
 
         This gets the current orderbook summary for a given token id. The floating rate is always provided. If
-        any fixed_rate_market_ids are specified, they will also be included; otherwise *all* fixed rate markets will
+        any fixed_rate_instrument_ids are specified, they will also be included; otherwise *all* fixed rate markets will
         be included alongside the floating rate. If min_bid_ask_size is specified then only the best bid or ask
         order level containing at least this amount will be returned.
 
@@ -417,7 +419,7 @@ class RestClient:
 
         Args:
             token_id (int): Token ID
-            fixed_rate_market_ids (list): List of fixed rate market ids. (Default value is None.)
+            fixed_rate_instrument_ids (list[str]): List of fixed rate instrument ID. (Default value is None.)
             min_bid_ask_size (int): Minimum bid ask size. (Default value is 0.)
 
         Returns:
@@ -445,16 +447,16 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_MARKET_SUMMARIES_ENDPOINT
+        if min_bid_ask_size is None:
+            min_bid_ask_size = 2
 
         dict_query_params = {
             constants.QUERY_KEY_TOKEN_ID: token_id,
+            constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size
         }
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
-
-        if min_bid_ask_size is not None:
-            dict_query_params.update({constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._private_session.get(url=url, cookies=self._response_cookies)
@@ -466,7 +468,7 @@ class RestClient:
 
         Returns:
             A list of market objects, where each object contains the following attributes:
-            - market_id: The unique identifier of the market.
+            - instrument_id: The unique identifier of the market.
             - market_name: The name of the market.
             - market_type: The type of the market (e.g., stocks, cryptocurrencies).
             - market_status: The current status of the market (e.g., open, closed).
@@ -545,13 +547,13 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_all_order_buckets(self, market_ids: list) -> dict:
-        """ Get orders (floating and fixed) in rate buckets for a given token ID and list of fixed rate market IDs
+    def get_all_order_buckets(self, instrument_ids: list[str]) -> dict:
+        """ Get orders (floating and fixed) in rate buckets for a given token ID and list of fixed rate instrument IDs
 
         Args:
-            market_ids (list<int>): List of markets ids, e.g. [1,2,15172]
+            instrument_ids (list<str>): List of instrument ids
 
-        Returns: dict of rate buckets, grouped by market_id.
+        Returns: dict of rate buckets, grouped by instrument id.
 
         {
             "rateBuckets": {
@@ -573,24 +575,23 @@ class RestClient:
         }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_ALL_ORDER_BUCKETS_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_MARKET_IDS: market_ids}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_IDS: instrument_ids}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_bba(self, token_id: int, fixed_rate_market_ids: list = None,
+    def get_bba(self, token_id: int, fixed_rate_instrument_ids: list[str] = None,
                 min_bid_ask_size: int = 0) -> dict:
-
         """ Get current best bid & ask by token id.
 
         This gets the current best bid and ask rates for a given token id. The floating rate is always provided. If
-        any fixed_rate_market_ids are specified, they will also be included; otherwise *all* fixed rate markets will
+        any fixed_rate_instrument_ids are specified, they will also be included; otherwise *all* fixed rate markets will
         be included alongside the floating rate. If min_bid_ask_size is specified then only the best bid or ask
         order level containing at least this amount will be returned.
 
         Args:
             token_id (int): Token ID
-            fixed_rate_market_ids (list): List of fixed rate market ids. (Default value is None.)
+            fixed_rate_instrument_ids (list[str]): List of fixed rate instrument id. (Default value is None.)
             min_bid_ask_size (int): Minimum bid ask size. (Default value is 0.)
 
         Returns:
@@ -616,20 +617,18 @@ class RestClient:
 
         dict_query_params = {
             constants.QUERY_KEY_TOKEN_ID: token_id,
+            constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size
         }
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
-
-        if min_bid_ask_size is not None:
-            dict_query_params.update({constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_all_fixed_details(self, token_id: int) -> dict:
-        """ Get active fixed rate markets by token id.
+    def get_all_fixed_details(self, token_id: int = None) -> dict:
+        """ Get all/active fixed rate markets by token id
 
         This gets the active fixed rate markets for a given token id. At the time of writing (although subject to change
         prior to our rollout to MainNet), available token id values are:
@@ -730,7 +729,10 @@ class RestClient:
         }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_ALL_FIXED_DETAILS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_TOKEN_ID: token_id})
+        dict_query_params = {}
+        if token_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_TOKEN_ID: token_id})
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
@@ -809,16 +811,16 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_details(self, market_id: int) -> dict:
-        """ Get fixed rate market details by market id.
+    def get_fixed_details(self, instrument_id: str) -> dict:
+        """ Get fixed rate market details by instrument id.
 
-        This gets fixed rate market details for a given (fixed rate) market id.
+        This gets fixed rate market details for a given (fixed rate) instrument id.
 
         For fixed markets, use the function get_active_fixed_rate_markets_by_token_id() to find currently active
         market ids.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): Instrument id of the fixed rate market.
 
         Returns: response: Session response from requesting details for a given fixed rate market. For example:
         {
@@ -849,43 +851,43 @@ class RestClient:
         }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_DETAILS_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_fees(self, market_id: int, order_qty: float) -> dict:
-        """ Get fixed rate transaction fee estimate by market id and quantity.
+    def get_fixed_fees(self, instrument_id: str, order_qty: float) -> dict:
+        """ Get fixed rate transaction fee estimate by instrument id and quantity.
 
-        This returns an estimate provided by the Infinity exchange for a fixed rate transaction for a given market id
+        This returns an estimate provided by the Infinity exchange for a fixed rate transaction for a given instrument id
         based on a given order size.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): Instrument id of the fixed rate market.
             order_qty (float): Order Quantity
 
         Returns:
-            response: Session response from requesting a fixed rate transaction fee estimate for a given market id and
+            response: Session response from requesting a fixed rate transaction fee estimate for a given instrument id and
             quantity. For example:
 
             {'estimatedTrxFee': '0.01'}
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_FEES_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_MARKET_ID: market_id,
+        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
                                                              constants.QUERY_KEY_ORDER_QTY: order_qty})
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_history(self, market_id: int, start: str = None, end: str = None,
+    def get_fixed_history(self, instrument_id: str, start: str = None, end: str = None,
                           interval_minutes: int = None) -> dict:
-        """ Get fixed rate market history by market id
+        """ Get fixed rate market history by instrument id.
 
-        This returns the fixed rate market history for a given market id between the specified start and end datetimes,
+        This returns the fixed rate market history for a given instrument id between the specified start and end datetimes,
         bucketed by the specified interval size (in minutes).
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the fixed rate market
             start (str): Start Date (of the form yyyymmdd) or Start Datetime
             end (str): End Date (of the form yyyymmdd) or End Datetime
             interval_minutes: Interval size in minutes for bucketing the returned data. If the interval size is more
@@ -906,7 +908,7 @@ class RestClient:
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_HISTORY_ENDPOINT
 
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.INSTRUMENT_ID: instrument_id}
 
         today = date.today()
         if start is None:
@@ -926,16 +928,17 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_orderbook(self, market_id: int) -> dict:
-        """ Get fixed rate orderbook details by market id.
+    def get_fixed_orderbook(self, instrument_id: str, limit: int = 10) -> dict:
+        """ Get fixed rate orderbook details by instrument id.
 
-        This gets the fixed rate orderbook details for a given (fixed rate) market id.
+        This gets the fixed rate orderbook details for a given (fixed rate) instrument id.
 
         For fixed markets, use the function get_active_fixed_rate_markets_by_token_id() to find currently active
-        Market IDs.
+        instrument ids.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the fixed rate market
+            limit (int): Limit the number of bids and asks returned. Default is 10.
 
         Returns:
             response: Session response from requesting orderbook details for a given fixed rate market. For example:
@@ -963,21 +966,23 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_ORDERBOOK_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
+                             constants.QUERY_KEY_LIMIT: limit}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_rate(self, market_id: int) -> dict:
-        """ Get latest fixed rate market info by market id.
+    def get_fixed_rate(self, instrument_id: str) -> dict:
+        """ Get latest fixed rate market info by instrument id.
 
-        This gets the latest fixed rate market info a given market id.
+        This gets the latest fixed rate market info a given instrument id.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the fixed rate market
 
         Returns:
-            response: Session response from requesting the latest fixed rate market info a given market id. For example:
+            response: Session response from requesting the latest fixed rate market info a given instrument id.
+            For example:
 
             {'marketInfo': {'marketId': 15172,
                 'rate': '0.0519',
@@ -987,21 +992,19 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_RATE_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_trades(self, market_id: int, limit: int = None) -> dict:
-        """ Get recent fixed rate transactions by market id.
+    def get_fixed_trades(self, instrument_id: str, limit: int = 20) -> dict:
+        """ Get recent fixed rate transactions by instrument id.
 
-        This gets the most recent fixed rate transactions for a given market id. Please note that, although the default
-        value for limit (the maximum number of transactions to be returned) is None, implying no limit, there is a
-        separate default limit on the Infinity exchange too which may impact the number of transactions returned.
+        This gets the most recent fixed rate transactions for a given instrument id.
 
         Args:
-            market_id (int): Market ID
-            limit (int): Maximum number of transactions to return. (Default is 100.)
+            instrument_id (str): instrument id of the fixed rate market.
+            limit (int): Maximum number of transactions to return. (Default is 20.)
 
         Returns:
             response: Session response from requesting recent fixed rate transactions for a give market. For example:
@@ -1029,22 +1032,21 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_TRADES_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
-        if limit is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIMIT: limit})
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
+                             constants.QUERY_KEY_LIMIT: limit}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_details(self, market_id: int) -> dict:
-        """ Get floating rate market details for a given market id.
+    def get_floating_details(self, instrument_id: str) -> dict:
+        """ Get floating rate market details for a given instrument id.
 
         This gets market details for a given floating rate market.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): instrument id of the floating rate market.
 
-        Returns: response: Session response from requesting the floating rate market details for a given market id.
+        Returns: response: Session response from requesting the floating rate market details for a given instrument id.
         For example:
             {
                 "market": {
@@ -1077,20 +1079,20 @@ class RestClient:
             }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_DETAILS_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_history(self, market_id: int, start: str = None, end: str = None,
+    def get_floating_history(self, instrument_id: str, start: str = None, end: str = None,
                              interval_minutes: int = None) -> dict:
-        """ Get floating rate market history by market id
+        """ Get floating rate market history by instrument id
 
         This returns the floating rate market history for a given market id between the specified start and end
         datetimes, bucketed by the specified interval size (in minutes).
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): instrument id of the floating rate market.
             start (str): Start Date (of the form yyyymmdd) or Start Datetime
             end (str): End Date (of the form yyyymmdd) or End Datetime
             interval_minutes: Interval size in minutes for bucketing the returned data. If the interval size is more
@@ -1110,7 +1112,7 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_HISTORY_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
 
         today = date.today()
         if start is None:
@@ -1130,17 +1132,17 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_orderbook(self, market_id: int, limit: int = 10) -> dict:
-        """ Get floating rate orderbook details by market id.
+    def get_floating_orderbook(self, instrument_id: str, limit: int = 10) -> dict:
+        """ Get floating rate orderbook details by instrument id.
 
-        This gets the first 10 levels of the order book for a given market id.
+        This gets the first 10 levels of the order book for a given instrument id.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the floating rate market.
             limit (int): Maximum number of orders to return
 
         Returns:
-            response: Session response from requesting floating rate orderbook details for a given market id. For
+            response: Session response from requesting floating rate orderbook details for a given instrument id. For
                 example:
 
             {'bids': [{'rate': '0.0216', 'quantity': '6.6675'},
@@ -1167,25 +1169,25 @@ class RestClient:
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_ORDERBOOK_ENDPOINT
         dict_query_params = {
-            constants.QUERY_KEY_ID_OR_CODE: market_id,
-            constants.QUERY_KEY_LIMIT: limit,
+            constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
+            constants.QUERY_KEY_LIMIT: limit
         }
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_rate(self, market_id: int) -> dict:
-        """ Get market info by market id.
+    def get_floating_rate(self, instrument_id: str) -> dict:
+        """ Get market info by instrument id.
 
-        This gets key market information for a given market id, specifically the borrow and lend price indices, as well
+        This gets key market information for a given instrument id, specifically the borrow and lend price indices, as well
         as creation date and latest (daily) update date.
 
         Args:
-            market_id (int): Market ID.
+            instrument_id (str): instrument id of the floating rate market.
 
         Returns:
-            response: Session response from requesting market info for a given market id. For example:
+            response: Session response from requesting market info for a given instrument id. For example:
 
             {'marketInfo': {'marketId': 1,
                 'rate': '0.0225',
@@ -1197,18 +1199,18 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_RATE_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ID_OR_CODE: market_id})
+        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_trades(self, market_id: int, limit: int = 20) -> dict:
-        """ Get recent floating rate transactions by market id.
+    def get_floating_trades(self, instrument_id: str, limit: int = 20) -> dict:
+        """ Get recent floating rate transactions by instrument id.
 
-        This gets the recent floating rate transactions for a given market id. If not limit is specified, then 20
+        This gets the recent floating rate transactions for a given instrument id. If not limit is specified, then 20
         transactions are returned. The maximum number of transactions that can be returned is 100.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): instrument id of the floating rate market.
             limit (int): Maximum number of transactions. (Default value is 20. Maximum value is 100.)
 
         Returns:
@@ -1233,24 +1235,24 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_TRADES_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id,
+        dict_query_params = {constants.INSTRUMENT_ID: instrument_id,
                              constants.QUERY_KEY_LIMIT: limit}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_historical_mid(self, token_id: int = None, fixed_rate_market_ids: list = None) -> dict:
+    def get_historical_mid(self, token_id: int = None, fixed_rate_instrument_ids: list[str] = None) -> dict:
         """ Get historical mid rates.
 
         This gets both the current last & mid rate, and the last & mid rate from 24 hours ago, as well as the last and
         mid rate deltas. If token id is specified, only values for this token will be provided; otherwise values
-        for *all* tokens will be provided. If any fixed_rate_market_ids are specified, they will also be included;
+        for *all* tokens will be provided. If any fixed_rate_instrument_ids are specified, they will also be included;
         otherwise *all* fixed rate markets will be included alongside the floating rate.
 
         Args:
             token_id (int): Token ID (Default value is None.)
-            fixed_rate_market_ids (list): List of fixed rate market ids. (Default value is None.)
+            fixed_rate_instrument_ids (list): List of fixed rate instrument ids. (Default value is None.)
 
         Returns:
             response: Session response from requesting historical mid rates. For example:
@@ -1284,14 +1286,14 @@ class RestClient:
         if token_id is not None:
             dict_query_params.update({constants.QUERY_KEY_TOKEN_ID: token_id})
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_historical_rates(self, token_id: int, fixed_rate_market_ids: list = None,
+    def get_historical_rates(self, token_id: int, fixed_rate_instrument_ids: list[str] = None,
                              days_to_include: int = 365) -> dict:
         """ Get historical rate details by token id.
 
@@ -1299,7 +1301,7 @@ class RestClient:
 
         Args:
             token_id (int): Token ID
-            fixed_rate_market_ids (list): List of fixed rate Market IDs. (Default value is None.)
+            fixed_rate_instrument_ids (list): List of fixed rate instrument IDs. (Default value is None.)
             days_to_include (int): Number of days to include. (Default value is 365.)
 
         Returns:
@@ -1511,8 +1513,8 @@ class RestClient:
             constants.QUERY_KEY_DAYS_TO_INCLUDE: days_to_include
         }
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
@@ -1639,7 +1641,7 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_yield_curve(self, token_id: int) -> dict:
+    def get_yield_curve(self, token_id: int, is_ull_yield_curve: bool = False) -> dict:
         """ Get interpolated yield curve by token id.
 
         This gets the interpolated yield cure for a given token id. Interpolation is provided for each daily datapoint
@@ -1660,6 +1662,7 @@ class RestClient:
 
         Args:
             token_id (int): Token ID
+            is_ull_yield_curve (bool): Whether to return the ULL yield curve. Defaults to False.
 
         Returns:
             response: Session response from requesting the interpolated yield curve for a given token. For example:
@@ -1715,7 +1718,8 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_YIELD_CURVE_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_TOKEN_ID: token_id})
+        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_TOKEN_ID: token_id,
+                                                             constants.QUERY_KEY_FULL_YIELD_CURVE: is_ull_yield_curve})
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
@@ -2025,7 +2029,8 @@ class RestClient:
         """
         return self._order_id_map[order_id]
 
-    def aggregate_orders_by_rate(self, floating_rate_market_id: int = None, fixed_rate_market_ids: list = None,
+    def aggregate_orders_by_rate(self, float_rate_instrument_id: str = None,
+                                 fixed_rate_instrument_ids: list[str] = None,
                                  account_id: int = None) -> dict:
         """ Get user's orders in rate buckets.
 
@@ -2033,8 +2038,8 @@ class RestClient:
         is specified, then the user's trading account is used.
 
         Args:
-            floating_rate_market_id (int): Floating rate market ID.
-            fixed_rate_market_ids (list): List of fixed rate market IDs.
+            float_rate_instrument_id (str): Floating rate instrument ID.
+            fixed_rate_instrument_ids (list[str]): List of fixed rate instrument IDs.
             account_id (int): Account ID (Default is None.)
 
         Returns:
@@ -2048,10 +2053,10 @@ class RestClient:
         """
         url = self._API_BASE_URL + constants.PRIVATE_AGGREGATE_ORDERS_BY_RATE_ENDPOINT
         dict_query_params = {}
-        if floating_rate_market_id is not None:
-            dict_query_params[constants.QUERY_KEY_FLOATING_RATE_MARKET_ID] = floating_rate_market_id
-        if fixed_rate_market_ids is not None and len(fixed_rate_market_ids) > 0:
-            dict_query_params[constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS] = fixed_rate_market_ids
+        if float_rate_instrument_id is not None:
+            dict_query_params[constants.QUERY_KEY_FLOATING_RATE_INSTRUMENT_ID] = float_rate_instrument_id
+        if fixed_rate_instrument_ids is not None and len(fixed_rate_instrument_ids) > 0:
+            dict_query_params[constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS] = fixed_rate_instrument_ids
 
         if len(dict_query_params) == 0:
             self._logger.error("API [aggregate_orders_by_rate] need to given a floating rate market ID "
@@ -2066,7 +2071,8 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def batch_cancel_fixed_orders(self, client_order_ids: list = None, order_ids: list = None) -> dict:
+    def batch_cancel_fixed_orders(self, client_order_ids: list[str] = None, order_ids: list[int] = None,
+                                  account_id: int = None) -> dict:
         """ Cancel fixed rate order by client order id.
 
         This cancels a fixed rate order as specified by client order id. Either client order id(s) or exchange order
@@ -2075,6 +2081,7 @@ class RestClient:
         Args:
             client_order_ids (list): client order IDs
             order_ids (list): exchange order IDs
+            account_id (int): Account ID (Default is None.)
 
         Returns:
             response: Session response from attempting to cancel a fixed rate order. Note a success boolean and empty
@@ -2083,8 +2090,12 @@ class RestClient:
             {}
 
         """
+        dict_query_params = {}
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_FIXED_ORDERS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ACCOUNT_ID: self._account_id})
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         if client_order_ids is not None and order_ids is not None:
             raise InputParameterError("Please only specify client_order_ids or order_ids, not both.")
@@ -2100,15 +2111,17 @@ class RestClient:
 
         return self._handle_response(response)
 
-    def batch_cancel_floating_orders(self, client_order_ids: list = None, order_ids: list = None) -> dict:
+    def batch_cancel_floating_orders(self, client_order_ids: list[str] = None, order_ids: list[int] = None,
+                                     account_id: int = None) -> dict:
         """ Cancel floating rate order by client order id.
 
         This cancels a floating rate order as specified by client order id. Either client order id(s) or exchange order
         id(s) should be specified, but not both. If both are specified, an exception is raised.
 
         Args:
-            client_order_ids (list): client order IDs
-            order_ids (list): exchange order IDs
+            client_order_ids (list[str]): client order IDs
+            order_ids (list[int]): exchange order IDs
+            account_id (int): Account ID (Default is None.)
 
         Returns:
             response: Session response from attempting to cancel a floating rate order. Note a success boolean and empty
@@ -2117,8 +2130,11 @@ class RestClient:
             {}
 
         """
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_FLOATING_ORDERS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ACCOUNT_ID: self._account_id})
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         if client_order_ids is not None and order_ids is not None:
             raise InputParameterError("Please only specify client_order_ids or order_ids, not both.")
@@ -2150,7 +2166,6 @@ class RestClient:
 
         """
 
-        # Done
         url = self._API_BASE_URL + constants.PRIVATE_CANCEL_FIXED_ORDER_ENDPOINT
         url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ORDER_ID: order_id})
         response = self._private_session.post(url=url, cookies=self._response_cookies)
@@ -2177,14 +2192,14 @@ class RestClient:
         response = self._private_session.post(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def create_fixed_order(self, market_id: int, order_type: int, side: int, quantity: float,
+    def create_fixed_order(self, instrument_id: str, order_type: int, side: int, quantity: float,
                            client_order_id: str, rate: float = None, passive: int = 0) -> dict:
         """ Create fixed rate order.
 
         This sends a fixed rate order to the Infinity exchange.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): Market instrument ID.
             order_type (int): Order type (1 for market order, or 2 for limit order).
             side (int): Side (0 for lend order, or 1 for borrow order).
             quantity (float): Order quantity.
@@ -2225,12 +2240,12 @@ class RestClient:
         url = self._API_BASE_URL + constants.PRIVATE_CREATE_FIXED_ORDER_ENDPOINT
 
         body = {
-            constants.MARKET_ID: market_id,
+            constants.INSTRUMENT_ID: instrument_id,
             constants.ACCOUNT_ID: self._account_id,
             constants.SIDE: side,
             constants.ORDER_TYPE: order_type,
             constants.QUANTITY: str(quantity),
-            constants.CLIENT_ORDER_ID: client_order_id,
+            constants.CLIENT_ORDER_ID: str(client_order_id),
             constants.PASSIVE: passive
         }
 
@@ -2240,14 +2255,14 @@ class RestClient:
         response = self._private_session.post(url=url, json=body, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def create_floating_order(self, market_id: int, order_type: int, side: int, quantity: float,
+    def create_floating_order(self, instrument_id: str, order_type: int, side: int, quantity: float,
                               client_order_id: str, rate: float = None, passive: int = 0) -> dict:
         """ Create floating rate order.
 
         This sends a floating rate order to the Infinity exchange.
 
         Args:
-            market_id (int): Market ID.
+            instrument_id (str): instrument ID.
             order_type (int): Order type. (1 for market order, or 2 for limit order.)
             side (int): Side, (0 for lend order, or 1 for borrow order.)
             quantity (float): Order quantity.
@@ -2290,7 +2305,7 @@ class RestClient:
         url = self._API_BASE_URL + constants.PRIVATE_CREATE_FLOATING_ORDER_ENDPOINT
 
         body = {
-            constants.MARKET_ID: market_id,
+            constants.INSTRUMENT_ID: instrument_id,
             constants.ACCOUNT_ID: self._account_id,
             constants.SIDE: side,
             constants.ORDER_TYPE: order_type,
@@ -2304,19 +2319,21 @@ class RestClient:
         response = self._private_session.post(url=url, json=body, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_fixed_orders(self, market_id: int = None, pending_only: bool = None, done_only: bool = None,
+    def get_fixed_orders(self, instrument_id: str = None, account_id: int = None, pending_only: bool = None,
+                         done_only: bool = None,
                          start_id: int = None, limit: int = 10) -> dict:
         """ Get a user's fixed rate orders.
 
         This gets the user's most recent fixed rate orders for their default trading account, ordered by order id. Fixed
-        rate orders can be retrieved for a given fixed rate market id, or if not specified for all fixed rate market
+        rate orders can be retrieved for a given fixed rate market instrument id, or if not specified for all fixed rate market
         ids. It can retrieve all orders, only pending orders, or only done orders. The order start ID and the
         maximum number of orders retrieved can optionally be set. If start ID is not set, then orders starting from
         the earliest order will be returned; if the maximum number of orders is not set, then a maximum of 10 orders
         will be returned.
 
         Args:
-            market_id (int): Market ID. (Default value is None.)
+            instrument_id (str): instrument id of fixed rate market. (Default value is None.)
+            account_id (int): account id. (Default value is None.)
             pending_only (bool): Include pending orders (True) or not (None). (Default value is None.)
             done_only (bool): Include completed orders (True) or not (None). (Default value is None.)
             start_id (int): Starting order ID. (Default value is None.)
@@ -2383,15 +2400,17 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_FIXED_ORDERS_ENDPOINT
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
 
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: self._account_id}
         if pending_only:
             dict_query_params[constants.QUERY_KEY_PENDING] = pending_only
         if done_only:
             dict_query_params[constants.QUERY_KEY_DONE] = done_only
 
-        if market_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_MARKET_ID: market_id})
+        if instrument_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
 
         if start_id is not None:
             dict_query_params.update({constants.QUERY_KEY_START_ID: start_id})
@@ -2403,19 +2422,21 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_floating_orders(self, market_id: int = None, pending_only: bool = None, done_only: bool = None,
+    def get_floating_orders(self, instrument_id: str = None, account_id: int = None, pending_only: bool = None,
+                            done_only: bool = None,
                             start_id: int = None, limit: int = 10) -> dict:
         """ Get a user's floating rate orders.
 
         This gets the user's most recent floating rate orders for their default trading account, ordered by order id.
-        Floating rate orders can be retrieved for a given floating rate market id, or if not specified for all
-        floating rate market ids. It can retrieve all orders, only pending orders, or only done orders. The order
+        Floating rate orders can be retrieved for a given floating rate instrument id, or if not specified for all
+        floating rate instrument ids. It can retrieve all orders, only pending orders, or only done orders. The order
         start ID and the maximum number of orders retrieved can optionally be set. If start ID is not set, then
         orders starting from the earliest order will be returned; if the maximum number of orders is not set, then a
         maximum of 10 orders will be returned.
 
         Args:
-            market_id (int): Market ID. (Default value is None.)
+            instrument_id (str): instrument id of the floating market. (Default value is None.)
+            account_id (int): account id. (Default value is None.)
             pending_only (bool): get pending orders only (True) or not (None). (Default value is None.)
             done_only (bool): get completed orders only (True) or not (None). (Default value is None.)
             start_id (int): Starting order ID. (Default value is None.)
@@ -2470,18 +2491,19 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_FLOATING_ORDERS_ENDPOINT
-
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: self._account_id}
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         if pending_only:
             dict_query_params[constants.QUERY_KEY_PENDING] = pending_only
         if done_only:
             dict_query_params[constants.QUERY_KEY_DONE] = done_only
 
-        if market_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_MARKET_ID: market_id})
+        if instrument_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
 
         if start_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_START_ID: market_id})
+            dict_query_params.update({constants.QUERY_KEY_START_ID: start_id})
 
         if limit is not None:
             dict_query_params.update({constants.QUERY_KEY_LIMIT: limit})
@@ -2490,18 +2512,18 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_floating_positions(self, market_id: int, account_id: int = None) -> dict:
-        """ Get user's current floating rate positions for a given market id.
+    def get_floating_positions(self, instrument_id: str = None, account_id: int = None) -> dict:
+        """ Get user's current floating rate positions for a given instrument id.
 
-        This gets the user's current floating rate positions for a given market id and account id. If no account id is
+        This gets the user's current floating rate positions for a given instrument id and account id. If no account id is
         specified, then the user's trading account is used.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the floating market.
             account_id (int): Account ID (Default is None.)
 
         Returns:
-            response: Session response from requesting the user's current floating rate positions for a given market id.
+            response: Session response from requesting the user's current floating rate positions for a given instrument id.
                 For example:
 
             {'positions': [{'accountId': 207,
@@ -2537,32 +2559,30 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_FLOATING_POSITIONS_ENDPOINT
-
-        dict_query_params = {
-            constants.QUERY_KEY_MARKET_ID: market_id,
-        }
-
-        if account_id is not None:
-            dict_query_params[constants.QUERY_KEY_ACCOUNT_ID] = account_id
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
+        if instrument_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_private_floating_trades(self, account_id: int = None, market_id: int = None,
+    def get_private_floating_trades(self, account_id: int = None, instrument_id: str = None,
                                     start_trx_id: int = None, limit: int = 20) -> dict:
         """ Get user's floating rate transactions by account id.
 
         This gets the user's floating rate transactions for a given account id. If no account id is specified, then the
-            user's trading account is used. If no market id is specified, then all markets are returned. If
+            user's trading account is used. If no instrument id is specified, then all markets are returned. If
             start transaction id is specified then only transactions from that id are returned; otherwise transactions
             from the first transaction are returned. If limit is not specified, then 20 transactions will be returned.
             Note that irrespective of the value of limit, not more than 100 transactions will be returned.
 
         Args:
             account_id (int): Account ID. (Default is None.)
-            market_id (int): Market ID. (Default is all floating rate markets.)
+            instrument_id (str): instrument id of the floating market. (Default is all floating rate markets.)
             start_trx_id (int): Start Transaction ID. (Default is None.)
             limit (int): Maximum number of transactions to return. (Default is 20. Maximum is 100.)
 
@@ -2593,8 +2613,8 @@ class RestClient:
 
         dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
 
-        if market_id is not None:
-            dict_query_params[constants.QUERY_KEY_MARKET_ID] = market_id
+        if instrument_id is not None:
+            dict_query_params[constants.QUERY_KEY_INSTRUMENT_ID] = instrument_id
         if start_trx_id is not None:
             dict_query_params[constants.QUERY_KEY_START_ID] = start_trx_id
         dict_query_params[constants.QUERY_KEY_LIMIT] = limit
@@ -2740,7 +2760,7 @@ class RestClient:
         for account in res["accounts"]:
             if account["type"] == account_type:
                 return account["accountId"]
-        self._logger.error(f"Cannot find {account_type=}")
+        self._logger.error(f"cannot find {account_type=}")
 
     def get_all_account_tx(self, transaction_type: int = None, start_id: int = None, limit: int = 20) -> dict:
         """ Get all account txs.
@@ -2812,11 +2832,13 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_account_info(self) -> dict:
+    def get_account_info(self, account_id: int = None) -> dict:
         """ Get user details for the default trading accounts
 
         This provided detailed information about the user's default trading account at Infinity exchange,
         including quantity of tokens in that account.
+        Args:
+            account_id (int): Account ID to get info for. If not provided, will use the user's default trading account.
 
         Returns:
             response: Session response from attempting to list details all of a user's default trading account.
@@ -2880,16 +2902,20 @@ class RestClient:
                 'availableQuantity': '5001.208244613'}]}}
 
         """
+        if account_id is None:
+            account_id = self._account_id
         url = self._API_BASE_URL + constants.PRIVATE_GET_ACCOUNT_INFO_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: self._account_id}
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_account_tx(self, limit: int = 20, transaction_type: str = None, start_id: int = None) -> dict:
+    def get_account_tx(self, limit: int = 20, account_id: int = None, transaction_type: str = None,
+                       start_id: int = None) -> dict:
         """Get account transactions.
 
        Args:
+           account_id (int, optional): Account ID to get transactions for. If not provided, will use the user's default trading account.
            limit (int, optional): Number of transactions to return. Default is 20.
            transaction_type (str, optional): Filter by transaction type.
            start_id (int, optional): Start ID for pagination.
@@ -2898,8 +2924,10 @@ class RestClient:
            dict: API response containing list of account transactions.
        """
         url = self._API_BASE_URL + constants.PRIVATE_GET_ACCOUNT_TX_ENDPOINT
+        if account_id is None:
+            account_id = self._account_id
         dict_query_params = {
-            constants.QUERY_KEY_ACCOUNT_ID: self._account_id,
+            constants.QUERY_KEY_ACCOUNT_ID: account_id,
             constants.QUERY_KEY_LIMIT: limit
         }
         if transaction_type is not None:
@@ -2998,14 +3026,14 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def transfer_floating_position(self, from_account_id: int, to_account_id: int, market_id: int,
+    def transfer_floating_position(self, from_account_id: int, to_account_id: int, instrument_id: str,
                                    quantity: float) -> dict:
         """Transfer position between accounts.
 
        Args:
            from_account_id (int): Account ID to transfer position from
            to_account_id (int): Account ID to transfer position to
-           market_id (int): ID of market for position being transferred
+           instrument_id (str): instrument ID of market for position being transferred
            quantity (float): Quantity of position to transfer
 
        Returns:
@@ -3016,7 +3044,7 @@ class RestClient:
         dict_query_params = {
             constants.QUERY_KEY_FROM_ACCOUNT_ID: from_account_id,
             constants.QUERY_KEY_TO_ACCOUNT_ID: to_account_id,
-            constants.QUERY_KEY_MARKET_ID: market_id,
+            constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
             constants.QUERY_KEY_QUANTITY: quantity
         }
 
@@ -3081,7 +3109,7 @@ class RestClient:
         url = self._API_BASE_URL + constants.PRIVATE_UPDATE_ACCOUNT_NAME_ENDPOINT
         dict_query_params = {
             constants.QUERY_KEY_ACCOUNT_ID: account_id,
-            constants.QUERY_KEY_NAME: new_name,
+            constants.QUERY_KEY_NAME: new_name
         }
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.post(url=url)
