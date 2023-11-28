@@ -611,7 +611,7 @@ class WebSocketClient:
             }
         """
         try:
-            instrument_id = message.get("s", None)
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
             update_time = datetime.utcfromtimestamp(message.get("E", None) / 1000)
 
             price_dict = message.get("P", None)
@@ -714,9 +714,10 @@ class WebSocketClient:
         {
             "e": "userOrder",
             "E": 1696384117706,
-            "s": "ETH-SPOT",
-            "m": 1,
+            "s": "ETH-SPOT", (symbol)
+            "m": 1, (market ID)
             "P": {
+                "I": "ETH-SPOT", (instrument ID)
                 "m": 1, (market ID)
                 "p": "0.01", (price)
                 "q": "0.01", (quantity)
@@ -737,7 +738,7 @@ class WebSocketClient:
             client_order_id = message.get("i", None)
             order_type = constants.LIMIT_ORDER if int(message.get("O", None)) == 2 else constants.MARKET_ORDER
             account_id = message.get("w", None)
-            instrument_id = message.get("m", None)  # TODO: check if this is correct
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
             market_type = constants.FLOATING if int(message.get("M", None)) == 1 else constants.FIXED_RATE
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
@@ -805,7 +806,7 @@ class WebSocketClient:
         }
         """
         try:
-            instrument_id = message.get("s", None)
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
             if instrument_id.split("-")[1] == "SPOT":
                 rates_type = constants.FLOATING
             else:
@@ -880,7 +881,7 @@ class WebSocketClient:
         message_obj = json.loads(message)
         result = message_obj.get("data", {}).get("result", None)
         if result is not None and isinstance(result, list) and len(result) > 0:
-            self._logger.info(f"Subscription list: {result}.")
+            self._logger.info(f"Public subscription list: {result}.")
         channel = message_obj.get("e", None)
         if channel is not None:
             if channel == constants.CHANNEL_RECENT_TRADES:
@@ -901,6 +902,9 @@ class WebSocketClient:
         """
         self._logger.debug(f"Received private message: {message=}.")
         message_obj = json.loads(message)
+        result = message_obj.get("data", {}).get("result", None)
+        if result is not None and isinstance(result, list) and len(result) > 0:
+            self._logger.info(f"Private subscription list: {result}.")
         channel = message_obj.get("e", None)
         private_message_obj = message_obj.get("P", None)
         if channel is not None:
