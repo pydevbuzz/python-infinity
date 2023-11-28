@@ -242,7 +242,7 @@ class RestClient:
 
     # *** Funding ***
 
-    def deposit(self, limit: int = 20, start_block_id: int = None) -> dict:
+    def deposit(self, limit: int = 20, start_block_id: int | None = None) -> dict:
         """Deposit assets to the user's account.
 
         Args:
@@ -262,7 +262,7 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_withdraw_status(self, request_ids: list) -> dict:
+    def get_withdraw_status(self, request_ids: list[int]) -> dict:
         """Get fund withdrawal request status (for given list of request IDs).
         Args:
            request_ids (list): List of Fund Withdrawal Request IDs, e.g. ["123", "456"]
@@ -277,14 +277,16 @@ class RestClient:
                }
            }
         """
-
+        if len(request_ids) == 0:
+            self._logger.error("get_withdraw_status request_ids cannot be empty.")
+            return {}
         url = self._API_BASE_URL + constants.PRIVATE_GET_WITHDRAW_STATUS_ENDPOINT
         dict_query_params = {constants.QUERY_KEY_REQUEST_IDS: request_ids}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_withdraws(self, limit: int = 20, start_id: int = None) -> dict:
+    def get_withdraws(self, limit: int = 20, start_id: int | None = None) -> dict:
         """ Gets data of fund withdrawals.
 
         Args:
@@ -359,7 +361,7 @@ class RestClient:
 
     # *** Markets ***
 
-    def get_market_MTMs(self, account_id: int = None) -> dict:
+    def get_market_MTMs(self, account_id: int | None = None) -> dict:
         """Get user's fixed positions marked to market by account id.
 
         This gets the user's fixed positions, marked to market, for a given account id.
@@ -369,30 +371,27 @@ class RestClient:
           account_id (int): Account ID (Default is None.)
 
         Returns:
-          response (dict): Session response from requesting the user's marked to market
-          fixed positions for a given account id. For example:
-
+          response (dict): Session response from requesting the user's marked to market fixed positions for a given
+          account id. For example:
           {
-            'mtm': [
-              {
-                'accountId': 207,
-                'marketId': 12611,
-                'tokenId': 5,
-                'maturityDate': 1711670400000,
-                'mtm': '0.0055274904108594085',
-                'key': {'accountId': 207}
-              },
-              {
-                'accountId': 207,
-                'marketId': 11757,
-                'tokenId': 5,
-                'maturityDate': 1692921600000,
-                'mtm': '0.000794262233068',
-                'key': {'accountId': 207}
-              },
-              ...
+            "mtm": [
+                {
+                    "accountId": 202,
+                    "marketId": 1,
+                    "instrumentId": "ETH-SPOT",
+                    "tokenId": 1,
+                    "mtm": "-282.981195038"
+                },
+                {
+                    "accountId": 202,
+                    "marketId": 12006,
+                    "instrumentId": "ETH-2023-12-01",
+                    "tokenId": 1,
+                    "mtm": "-42.970918771015334",
+                    "maturityDate": 1701417600000
+                },...
             ]
-          }
+        }
         """
         if account_id is None:
             account_id = self._account_id
@@ -402,12 +401,12 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_market_summaries(self, token_id: int, fixed_rate_market_ids: list = None,
-                             min_bid_ask_size: int = 0) -> dict:
+    def get_market_summaries(self, token_id: int, fixed_rate_instrument_ids: list[str] | None = None,
+                             min_bid_ask_size: int | None = None) -> dict:
         """ Get orderbook summary by token id.
 
         This gets the current orderbook summary for a given token id. The floating rate is always provided. If
-        any fixed_rate_market_ids are specified, they will also be included; otherwise *all* fixed rate markets will
+        any fixed_rate_instrument_ids are specified, they will also be included; otherwise *all* fixed rate markets will
         be included alongside the floating rate. If min_bid_ask_size is specified then only the best bid or ask
         order level containing at least this amount will be returned.
 
@@ -417,44 +416,60 @@ class RestClient:
 
         Args:
             token_id (int): Token ID
-            fixed_rate_market_ids (list): List of fixed rate market ids. (Default value is None.)
+            fixed_rate_instrument_ids (list[str]): List of fixed rate instrument ID. (Default value is None.)
             min_bid_ask_size (int): Minimum bid ask size. (Default value is 0.)
 
         Returns:
             response: Session response from requesting the orderbook summary for a given token id. For example:
 
-            {'summary': {'position': '19.18546', 'dv01': '0', 'carry': '0.86560154'},
-                'ir': {'marketId': 1,
-                'bid': '0.0218',
-                'bidStepSize': '2',
-                'ask': '0.0243',
-                'askStepSize': '2',
-                'position': '19.18546',
-                'carry': '0.418243028'},
-                'fr': [{'marketId': 15172,
-                'name': 'ETH-FIXED',
-                'daysToMaturity': 343,
-                'marketRate': '0.05335',
-                'bid': '0.0516',
-                'bidStepSize': '2',
-                'ask': '0.0548',
-                'askStepSize': '2',
-                'position': '0',
-                'pv01Series': '0.000091577857',
-                'dv01': '0'}]}
+            {
+                "summary": {
+                    "position": "-1663900.499",
+                    "dv01": "-37.06615241628705619",
+                    "carry": "-109412.515206378184334876"
+                },
+                "ir": {
+                    "marketId": 1,
+                    "instrumentId": "ETH-SPOT",
+                    "bid": "0.0184",
+                    "bidQuantity": "42.3415",
+                    "bidStepSize": "2",
+                    "ask": "0.0194",
+                    "askQuantity": "62.6592",
+                    "askStepSize": "2",
+                    "position": "-702938.5559",
+                    "carry": "-12934.06942856"
+                },
+                "fr": [
+                    {
+                        "marketId": 11986,
+                        "instrumentId": "ETH-2023-11-28",
+                        "name": "ETH-1D",
+                        "daysToMaturity": 1,
+                        "bid": "0",
+                        "bidQuantity": "0",
+                        "bidStepSize": "2",
+                        "ask": "0",
+                        "askQuantity": "0",
+                        "askStepSize": "2",
+                        "position": "0",
+                        "pv01Series": "0.000000273957",
+                        "dv01": "0"
+                    },...]
+            }
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_MARKET_SUMMARIES_ENDPOINT
+        if min_bid_ask_size is None:
+            min_bid_ask_size = 2
 
         dict_query_params = {
             constants.QUERY_KEY_TOKEN_ID: token_id,
+            constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size
         }
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
-
-        if min_bid_ask_size is not None:
-            dict_query_params.update({constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._private_session.get(url=url, cookies=self._response_cookies)
@@ -466,7 +481,7 @@ class RestClient:
 
         Returns:
             A list of market objects, where each object contains the following attributes:
-            - market_id: The unique identifier of the market.
+            - instrument_id: The unique identifier of the market.
             - market_name: The name of the market.
             - market_type: The type of the market (e.g., stocks, cryptocurrencies).
             - market_status: The current status of the market (e.g., open, closed).
@@ -489,54 +504,24 @@ class RestClient:
                         "makerFeeRate": "0.001",
                         "interestFeeRate": "0.0513",
                         "enable": "True",
-                        "borrowPriceIndex": "1.0420519594933",
-                        "lendPriceIndex": "1.0417719188674",
-                        "priceIndexDate": 1698738780000,
-                        "rate": "0.0191",
-                        "updateDate": 1698738817000,
-                        "direction": "True",
-                        "actualRate": "0.0191",
-                        "name": "ETH SPOT",
-                        "code": "ETH-SPOT",
-                        "high24": "0",
-                        "low24": "0",
-                        "volume24": "0",
-                        "rate24": "0",
-                        "totalValue": "0",
-                        "deposits": 140660,
-                        "borrows": 11880,
-                        "subscriptions": "87453.81788"
-                    },
-                    {
-                        "marketId": 2,
-                        "tokenId": 3,
-                        "quantityStep": "0.01",
-                        "minQuantity": "1",
-                        "maxQuantity": "10000000",
-                        "rateStep": "0.0001",
-                        "category": 1,
-                        "takerFeeRate": "0.0001",
-                        "makerFeeRate": "0.001",
-                        "interestFeeRate": "0.0622",
-                        "enable": "True",
-                        "borrowPriceIndex": "1.0977918339581",
-                        "lendPriceIndex": "1.0974694156065",
-                        "priceIndexDate": 1698738780000,
-                        "rate": "0.033",
-                        "updateDate": 1698738817000,
+                        "borrowPriceIndex": "1.0436041980657",
+                        "lendPriceIndex": "1.0433127067136",
+                        "priceIndexDate": 1701057900000,
+                        "rate": "0.0184",
+                        "updateDate": 1701057901000,
                         "direction": "False",
-                        "actualRate": "0.034246",
-                        "name": "USDC SPOT",
-                        "code": "USDC-SPOT",
+                        "actualRate": "0.0184",
+                        "name": "ETH SPOT",
+                        "instrumentId": "ETH-SPOT",
                         "high24": "0",
                         "low24": "0",
                         "volume24": "0",
                         "rate24": "0",
                         "totalValue": "0",
-                        "deposits": 558318,
-                        "borrows": 602928,
-                        "subscriptions": "7870770.365370971"
-                    }
+                        "deposits": 133893,
+                        "borrows": 11534,
+                        "subscriptions": "790668.72898"
+                    },...
                 ]
             }
 
@@ -545,91 +530,92 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_all_order_buckets(self, market_ids: list) -> dict:
-        """ Get orders (floating and fixed) in rate buckets for a given token ID and list of fixed rate market IDs
+    def get_all_order_buckets(self, instrument_ids: list[str]) -> dict:
+        """ Get orders (floating and fixed) in rate buckets for a given token ID and list of fixed rate instrument IDs
 
         Args:
-            market_ids (list<int>): List of markets ids, e.g. [1,2,15172]
+            instrument_ids (list<str>): List of instrument ids
 
-        Returns: dict of rate buckets, grouped by market_id.
-
-        {
-            "rateBuckets": {
-                "1": [
+        Returns:
+            dict of rate buckets, grouped by instrument id. For example:
+            {
+                "rateBuckets": [
                     {
-                        "marketId": 1,
-                        "rate": "0.014",
-                        "quantity": "37.6045",
-                        "side": "True"
-                    },
-                    {
-                        "marketId": 1,
-                        "rate": "0.0139",
-                        "quantity": "62.6531",
+                        "marketId": 11991,
+                        "instrumentId": "ETH-2023-11-28",
+                        "rate": "0.0349",
+                        "quantity": "1.8744",
                         "side": "True"
                     },...
                 ]
             }
-        }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_ALL_ORDER_BUCKETS_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_MARKET_IDS: market_ids}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_IDS: instrument_ids}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_bba(self, token_id: int, fixed_rate_market_ids: list = None,
+    def get_bba(self, token_id: int, fixed_rate_instrument_ids: list[str] | None = None,
                 min_bid_ask_size: int = 0) -> dict:
-
         """ Get current best bid & ask by token id.
 
         This gets the current best bid and ask rates for a given token id. The floating rate is always provided. If
-        any fixed_rate_market_ids are specified, they will also be included; otherwise *all* fixed rate markets will
+        any fixed_rate_instrument_ids are specified, they will also be included; otherwise *all* fixed rate markets will
         be included alongside the floating rate. If min_bid_ask_size is specified then only the best bid or ask
         order level containing at least this amount will be returned.
 
         Args:
             token_id (int): Token ID
-            fixed_rate_market_ids (list): List of fixed rate market ids. (Default value is None.)
+            fixed_rate_instrument_ids (list[str]): List of fixed rate instrument id. (Default value is None.)
             min_bid_ask_size (int): Minimum bid ask size. (Default value is 0.)
 
         Returns:
-            response: Session response from requesting the current best bid and ask rates for a given token id. For
-                example:
-
-        {'ir': {'marketId': 1,
-            'bid': '0.0217',
-            'bidStepSize': '2',
-            'ask': '0.0242',
-            'askStepSize': '2'},
-            'fr': [{'marketId': 15172,
-            'name': 'ETH-FIXED',
-            'daysToMaturity': 343,
-            'marketRate': '0.0524',
-            'bid': '0.0519',
-            'bidStepSize': '0',
-            'ask': '0.0529',
-            'askStepSize': '0'}]}
-
+            response: Session response from requesting the current best bid and ask rates for a given token id.
+            For example:
+            {
+                "ir": {
+                    "marketId": 1,
+                    "instrumentId": "ETH-SPOT",
+                    "bid": "0.0184",
+                    "bidQuantity": "42.3415",
+                    "bidStepSize": "0",
+                    "ask": "0.0194",
+                    "askQuantity": "62.6592",
+                    "askStepSize": "0"
+                },
+                "fr": [
+                    {
+                        "marketId": 11986,
+                        "instrumentId": "ETH-2023-11-27",
+                        "name": "ETH-FIXED",
+                        "daysToMaturity": 1,
+                        "bid": "0",
+                        "bidQuantity": "0",
+                        "bidStepSize": "0",
+                        "ask": "0",
+                        "askQuantity": "0",
+                        "askStepSize": "0"
+                    }
+                ]
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_BBA_ENDPOINT
 
         dict_query_params = {
             constants.QUERY_KEY_TOKEN_ID: token_id,
+            constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size
         }
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
-
-        if min_bid_ask_size is not None:
-            dict_query_params.update({constants.QUERY_KEY_MIN_BID_N_ASK_SIZE: min_bid_ask_size})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_all_fixed_details(self, token_id: int) -> dict:
-        """ Get active fixed rate markets by token id.
+    def get_all_fixed_details(self, token_id: int | None = None) -> dict:
+        """ Get all/active fixed rate markets by token id
 
         This gets the active fixed rate markets for a given token id. At the time of writing (although subject to change
         prior to our rollout to MainNet), available token id values are:
@@ -651,86 +637,28 @@ class RestClient:
         {
             "markets": [
                 {
-                    "marketId": 11843,
+                    "marketId": 11986,
                     "tokenId": 1,
-                    "code": "ETH-2023-10-31",
+                    "instrumentId": "ETH-2023-11-27",
                     "name": "ETH-FIXED",
-                    "rate": "0.035",
-                    "bestBid": "0.0346",
-                    "midRate": "0.0348",
-                    "bestAsk": "0.035",
                     "quantityStep": "0.0001",
                     "minQuantity": "0.0001",
                     "maxQuantity": "100000",
                     "rateStep": "0.0001",
                     "enable": "True",
-                    "direction": "True",
+                    "direction": "False",
                     "daysToMaturity": 1,
-                    "updateDate": 1698739096000,
-                    "maturityDate": 1698739200000
-                },
-                {
-                    "marketId": 11844,
-                    "tokenId": 1,
-                    "code": "ETH-2023-11-01",
-                    "name": "ETH-FIXED",
-                    "rate": "0.0452",
-                    "bestBid": "0.0421",
-                    "midRate": "0.04365",
-                    "bestAsk": "0.0452",
-                    "quantityStep": "0.0001",
-                    "minQuantity": "0.0001",
-                    "maxQuantity": "100000",
-                    "rateStep": "0.0001",
-                    "enable": "True",
-                    "direction": "True",
-                    "daysToMaturity": 2,
-                    "updateDate": 1698739094000,
-                    "maturityDate": 1698825600000
-                },
-                {
-                    "marketId": 11867,
-                    "tokenId": 1,
-                    "code": "ETH-2023-11-03",
-                    "name": "ETH-FIXED",
-                    "rate": "0.0469",
-                    "bestBid": "0.0469",
-                    "midRate": "0.0479",
-                    "bestAsk": "0.0489",
-                    "quantityStep": "0.0001",
-                    "minQuantity": "0.0001",
-                    "maxQuantity": "100000",
-                    "rateStep": "0.0001",
-                    "enable": "True",
-                    "direction": "False",
-                    "daysToMaturity": 4,
-                    "updateDate": 1698739094000,
-                    "maturityDate": 1698998400000
-                },
-                {
-                    "marketId": 11901,
-                    "tokenId": 1,
-                    "code": "ETH-2023-11-10",
-                    "name": "ETH-FIXED",
-                    "rate": "0.047",
-                    "bestBid": "0.047",
-                    "midRate": "0.048",
-                    "bestAsk": "0.049",
-                    "quantityStep": "0.0001",
-                    "minQuantity": "0.0001",
-                    "maxQuantity": "100000",
-                    "rateStep": "0.0001",
-                    "enable": "True",
-                    "direction": "False",
-                    "daysToMaturity": 11,
-                    "updateDate": 1698739094000,
-                    "maturityDate": 1699603200000
-                }
+                    "updateDate": 1701060305000,
+                    "maturityDate": 1701072000000
+                },...
             ]
         }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_ALL_FIXED_DETAILS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_TOKEN_ID: token_id})
+        dict_query_params = {}
+        if token_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_TOKEN_ID: token_id})
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
@@ -754,83 +682,48 @@ class RestClient:
                     "makerFeeRate": "0.001",
                     "interestFeeRate": "0.0513",
                     "enable": "True",
-                    "borrowPriceIndex": "1.0420516237184",
-                    "lendPriceIndex": "1.0417715866842",
-                    "priceIndexDate": 1698738240000,
-                    "rate": "0.0187",
-                    "updateDate": 1698738294000,
+                    "borrowPriceIndex": "1.0436055811517",
+                    "lendPriceIndex": "1.0433140746",
+                    "priceIndexDate": 1701060180000,
+                    "rate": "0.0184",
+                    "updateDate": 1701060181000,
                     "direction": "False",
-                    "actualRate": "0.0187",
+                    "actualRate": "0.0184",
                     "name": "ETH SPOT",
-                    "code": "ETH-SPOT",
+                    "instrumentId": "ETH-SPOT",
                     "high24": "0",
                     "low24": "0",
                     "volume24": "0",
                     "rate24": "0",
                     "totalValue": "0",
-                    "deposits": 140799,
-                    "borrows": 11663,
-                    "subscriptions": "87652.46628"
-                },
-                {
-                    "marketId": 2,
-                    "tokenId": 3,
-                    "quantityStep": "0.01",
-                    "minQuantity": "1",
-                    "maxQuantity": "10000000",
-                    "rateStep": "0.0001",
-                    "category": 1,
-                    "takerFeeRate": "0.0001",
-                    "makerFeeRate": "0.001",
-                    "interestFeeRate": "0.0622",
-                    "enable": "True",
-                    "borrowPriceIndex": "1.0977912040311",
-                    "lendPriceIndex": "1.0974687894994",
-                    "priceIndexDate": 1698738240000,
-                    "rate": "0.0324",
-                    "updateDate": 1698738294000,
-                    "direction": "False",
-                    "actualRate": "0.033186",
-                    "name": "USDC SPOT",
-                    "code": "USDC-SPOT",
-                    "high24": "0",
-                    "low24": "0",
-                    "volume24": "0",
-                    "rate24": "0",
-                    "totalValue": "0",
-                    "deposits": 483537,
-                    "borrows": 521861,
-                    "subscriptions": "7868966.785370971"
-                }
-            ]
+                    "deposits": 133893,
+                    "borrows": 11534,
+                    "subscriptions": "790668.72898"
+                },...]
         }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_ALL_FLOATING_DETAILS_ENDPOINT
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_details(self, market_id: int) -> dict:
-        """ Get fixed rate market details by market id.
+    def get_fixed_details(self, instrument_id: str) -> dict:
+        """ Get fixed rate market details by instrument id.
 
-        This gets fixed rate market details for a given (fixed rate) market id.
+        This gets fixed rate market details for a given (fixed rate) instrument id.
 
         For fixed markets, use the function get_active_fixed_rate_markets_by_token_id() to find currently active
         market ids.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): Instrument id of the fixed rate market.
 
         Returns: response: Session response from requesting details for a given fixed rate market. For example:
         {
             "market": {
-                "marketId": 11843,
+                "marketId": 11986,
                 "tokenId": 1,
-                "code": "ETH-2023-10-31",
+                "instrumentId": "ETH-2023-11-27",
                 "name": "ETH-FIXED",
-                "rate": "0.0345",
-                "bestBid": "0.0345",
-                "midRate": "0.03655",
-                "bestAsk": "0.0386",
                 "quantityStep": "0.0001",
                 "minQuantity": "0.0001",
                 "maxQuantity": "100000",
@@ -838,54 +731,54 @@ class RestClient:
                 "enable": "True",
                 "direction": "False",
                 "daysToMaturity": 1,
-                "updateDate": 1698738307000,
+                "updateDate": 1701060305000,
                 "high24": "0",
                 "low24": "0",
                 "volume24": "0",
                 "rate24": "0",
                 "totalValue": "0",
-                "maturityDate": 1698739200000
+                "maturityDate": 1701072000000
             }
         }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_DETAILS_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_fees(self, market_id: int, order_qty: float) -> dict:
-        """ Get fixed rate transaction fee estimate by market id and quantity.
+    def get_fixed_fees(self, instrument_id: str, order_qty: float) -> dict:
+        """ Get fixed rate transaction fee estimate by instrument id and quantity.
 
-        This returns an estimate provided by the Infinity exchange for a fixed rate transaction for a given market id
+        This returns an estimate provided by the Infinity exchange for a fixed rate transaction for a given instrument id
         based on a given order size.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): Instrument id of the fixed rate market.
             order_qty (float): Order Quantity
 
         Returns:
-            response: Session response from requesting a fixed rate transaction fee estimate for a given market id and
+            response: Session response from requesting a fixed rate transaction fee estimate for a given instrument id and
             quantity. For example:
 
-            {'estimatedTrxFee': '0.01'}
+            {'estimatedTrxFee': '0.001'}
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_FEES_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_MARKET_ID: market_id,
+        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
                                                              constants.QUERY_KEY_ORDER_QTY: order_qty})
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_history(self, market_id: int, start: str = None, end: str = None,
-                          interval_minutes: int = None) -> dict:
-        """ Get fixed rate market history by market id
+    def get_fixed_history(self, instrument_id: str, start: str | None = None, end: str | None = None,
+                          interval_minutes: int | None = None) -> dict:
+        """ Get fixed rate market history by instrument id.
 
-        This returns the fixed rate market history for a given market id between the specified start and end datetimes,
+        This returns the fixed rate market history for a given instrument id between the specified start and end datetimes,
         bucketed by the specified interval size (in minutes).
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the fixed rate market
             start (str): Start Date (of the form yyyymmdd) or Start Datetime
             end (str): End Date (of the form yyyymmdd) or End Datetime
             interval_minutes: Interval size in minutes for bucketing the returned data. If the interval size is more
@@ -906,7 +799,7 @@ class RestClient:
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_HISTORY_ENDPOINT
 
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.INSTRUMENT_ID: instrument_id}
 
         today = date.today()
         if start is None:
@@ -926,16 +819,17 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_orderbook(self, market_id: int) -> dict:
-        """ Get fixed rate orderbook details by market id.
+    def get_fixed_orderbook(self, instrument_id: str, limit: int = 10) -> dict:
+        """ Get fixed rate orderbook details by instrument id.
 
-        This gets the fixed rate orderbook details for a given (fixed rate) market id.
+        This gets the fixed rate orderbook details for a given (fixed rate) instrument id.
 
         For fixed markets, use the function get_active_fixed_rate_markets_by_token_id() to find currently active
-        Market IDs.
+        instrument ids.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the fixed rate market
+            limit (int): Limit the number of bids and asks returned. Default is 10.
 
         Returns:
             response: Session response from requesting orderbook details for a given fixed rate market. For example:
@@ -963,45 +857,46 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_ORDERBOOK_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
+                             constants.QUERY_KEY_LIMIT: limit}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_rate(self, market_id: int) -> dict:
-        """ Get latest fixed rate market info by market id.
+    def get_fixed_rate(self, instrument_id: str) -> dict:
+        """ Get latest fixed rate market info by instrument id.
 
-        This gets the latest fixed rate market info a given market id.
+        This gets the latest fixed rate market info a given instrument id.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the fixed rate market
 
         Returns:
-            response: Session response from requesting the latest fixed rate market info a given market id. For example:
-
-            {'marketInfo': {'marketId': 15172,
-                'rate': '0.0519',
-                'midRate': '0.0516',
-                'direction': True,
-                'updateDate': 1689839341425}}
-
+            response: Session response from requesting the latest fixed rate market info a given instrument id.
+            For example:
+            {
+                "marketInfo": {
+                    "marketId": 11986,
+                    "instrumentId": "ETH-2023-11-27",
+                    "direction": "False",
+                    "updateDate": 1701052205000
+                }
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_RATE_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_fixed_trades(self, market_id: int, limit: int = None) -> dict:
-        """ Get recent fixed rate transactions by market id.
+    def get_fixed_trades(self, instrument_id: str, limit: int = 20) -> dict:
+        """ Get recent fixed rate transactions by instrument id.
 
-        This gets the most recent fixed rate transactions for a given market id. Please note that, although the default
-        value for limit (the maximum number of transactions to be returned) is None, implying no limit, there is a
-        separate default limit on the Infinity exchange too which may impact the number of transactions returned.
+        This gets the most recent fixed rate transactions for a given instrument id.
 
         Args:
-            market_id (int): Market ID
-            limit (int): Maximum number of transactions to return. (Default is 100.)
+            instrument_id (str): instrument id of the fixed rate market.
+            limit (int): Maximum number of transactions to return. (Default is 20.)
 
         Returns:
             response: Session response from requesting recent fixed rate transactions for a give market. For example:
@@ -1029,68 +924,67 @@ class RestClient:
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FIXED_TRADES_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
-        if limit is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIMIT: limit})
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
+                             constants.QUERY_KEY_LIMIT: limit}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_details(self, market_id: int) -> dict:
-        """ Get floating rate market details for a given market id.
+    def get_floating_details(self, instrument_id: str) -> dict:
+        """ Get floating rate market details for a given instrument id.
 
         This gets market details for a given floating rate market.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the floating rate market.
 
-        Returns: response: Session response from requesting the floating rate market details for a given market id.
+        Returns: response: Session response from requesting the floating rate market details for a given instrument id.
         For example:
-            {
-                "market": {
-                    "marketId": 1,
-                    "tokenId": 1,
-                    "quantityStep": "0.0001",
-                    "minQuantity": "0.0001",
-                    "maxQuantity": "100000",
-                    "rateStep": "0.0001",
-                    "category": 1,
-                    "takerFeeRate": "0.0001",
-                    "makerFeeRate": "0.001",
-                    "interestFeeRate": "0.0513",
-                    "enable": "True",
-                    "borrowPriceIndex": "1.0420595487083",
-                    "lendPriceIndex": "1.0417794369774",
-                    "priceIndexDate": 1698749460000,
-                    "rate": "0.0233",
-                    "updateDate": 1698749497000,
-                    "direction": "False",
-                    "actualRate": "0.0233",
-                    "name": "ETH SPOT",
-                    "code": "ETH-SPOT",
-                    "high24": "0",
-                    "low24": "0",
-                    "volume24": "0",
-                    "rate24": "0",
-                    "totalValue": "0"
-                }
+        {
+            "market": {
+                "marketId": 1,
+                "tokenId": 1,
+                "quantityStep": "0.0001",
+                "minQuantity": "0.0001",
+                "maxQuantity": "100000",
+                "rateStep": "0.0001",
+                "category": 1,
+                "takerFeeRate": "0.0001",
+                "makerFeeRate": "0.001",
+                "interestFeeRate": "0.0513",
+                "enable": "True",
+                "borrowPriceIndex": "1.0436063454907",
+                "lendPriceIndex": "1.0433148305391",
+                "priceIndexDate": 1701061440000,
+                "rate": "0.0184",
+                "updateDate": 1701061441000,
+                "direction": "False",
+                "actualRate": "0.0184",
+                "name": "ETH SPOT",
+                "instrumentId": "ETH-SPOT",
+                "high24": "0",
+                "low24": "0",
+                "volume24": "0",
+                "rate24": "0",
+                "totalValue": "0"
             }
+        }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_DETAILS_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_history(self, market_id: int, start: str = None, end: str = None,
-                             interval_minutes: int = None) -> dict:
-        """ Get floating rate market history by market id
+    def get_floating_history(self, instrument_id: str, start: str | None = None, end: str | None = None,
+                             interval_minutes: int | None = None) -> dict:
+        """ Get floating rate market history by instrument id
 
         This returns the floating rate market history for a given market id between the specified start and end
         datetimes, bucketed by the specified interval size (in minutes).
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): instrument id of the floating rate market.
             start (str): Start Date (of the form yyyymmdd) or Start Datetime
             end (str): End Date (of the form yyyymmdd) or End Datetime
             interval_minutes: Interval size in minutes for bucketing the returned data. If the interval size is more
@@ -1098,19 +992,17 @@ class RestClient:
             a multiple of 15 minutes.
 
         Returns:
-            {'date': 20221022,
-            'open': '0',
-            'close': '0',
-            'high': '0',
-            'low': '0',
-            'volume': '0',
-            'totalValue': '85814.42378',
-            'lendDepth': 4333,
-            'borrowDepth': 375}
+            {
+                "open": "0",
+                "close": "0",
+                "high": "0",
+                "low": "0",
+                "volume": "0"
+            }
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_HISTORY_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id}
+        dict_query_params = {constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
 
         today = date.today()
         if start is None:
@@ -1130,17 +1022,17 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_orderbook(self, market_id: int, limit: int = 10) -> dict:
-        """ Get floating rate orderbook details by market id.
+    def get_floating_orderbook(self, instrument_id: str, limit: int = 10) -> dict:
+        """ Get floating rate orderbook details by instrument id.
 
-        This gets the first 10 levels of the order book for a given market id.
+        This gets the first 10 levels of the order book for a given instrument id.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the floating rate market.
             limit (int): Maximum number of orders to return
 
         Returns:
-            response: Session response from requesting floating rate orderbook details for a given market id. For
+            response: Session response from requesting floating rate orderbook details for a given instrument id. For
                 example:
 
             {'bids': [{'rate': '0.0216', 'quantity': '6.6675'},
@@ -1167,115 +1059,129 @@ class RestClient:
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_ORDERBOOK_ENDPOINT
         dict_query_params = {
-            constants.QUERY_KEY_ID_OR_CODE: market_id,
-            constants.QUERY_KEY_LIMIT: limit,
+            constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
+            constants.QUERY_KEY_LIMIT: limit
         }
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_rate(self, market_id: int) -> dict:
-        """ Get market info by market id.
+    def get_floating_rate(self, instrument_id: str) -> dict:
+        """ Get market info by instrument id.
 
-        This gets key market information for a given market id, specifically the borrow and lend price indices, as well
+        This gets key market information for a given instrument id, specifically the borrow and lend price indices, as well
         as creation date and latest (daily) update date.
 
         Args:
-            market_id (int): Market ID.
+            instrument_id (str): instrument id of the floating rate market.
 
         Returns:
-            response: Session response from requesting market info for a given market id. For example:
+            response: Session response from requesting market info for a given instrument id. For example:
 
-            {'marketInfo': {'marketId': 1,
-                'rate': '0.0225',
-                'direction': True,
-                'borrowPriceIndex': '1.0367765657802',
-                'lendPriceIndex': '1.0365535026752',
-                'priceIndexDate': 1689912120000,
-                'updateDate': 1689930425547}}
-
+            {
+                "marketInfo": {
+                    "marketId": 1,
+                    "instrumentId": "ETH-SPOT",
+                    "rate": "0.0184",
+                    "direction": "False",
+                    "borrowPriceIndex": "1.0436093664524",
+                    "lendPriceIndex": "1.0433178183012",
+                    "priceIndexDate": 1701066420000,
+                    "updateDate": 1701066421032
+                }
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_RATE_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ID_OR_CODE: market_id})
+        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_floating_trades(self, market_id: int, limit: int = 20) -> dict:
-        """ Get recent floating rate transactions by market id.
+    def get_floating_trades(self, instrument_id: str, limit: int = 20) -> dict:
+        """ Get recent floating rate transactions by instrument id.
 
-        This gets the recent floating rate transactions for a given market id. If not limit is specified, then 20
+        This gets the recent floating rate transactions for a given instrument id. If not limit is specified, then 20
         transactions are returned. The maximum number of transactions that can be returned is 100.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): instrument id of the floating rate market.
             limit (int): Maximum number of transactions. (Default value is 20. Maximum value is 100.)
 
         Returns:
             response: Session response from requesting the user's recent floating rate transactions. For example:
-
-            {'trxs': [{'side': True,
-                'rate': '0.0212',
-                'quantity': '1.3521',
-                'date': 1689926578303},
-                {'side': True,
-                'rate': '0.0212',
-                'quantity': '1.7653',
-                'date': 1689926573355},
-                {'side': True,
-                'rate': '0.0212',
-                'quantity': '1.8328',
-                'date': 1689926568762},
-                {'side': True,
-                'rate': '0.0212',
-                'quantity': '2.8529',
-                'date': 1689925543519}]}
-
+            {
+                "trxs": [
+                    {
+                        "tradeId": 85296286,
+                        "side": "False",
+                        "rate": "0.0184",
+                        "quantity": "0.0008",
+                        "date": 1701055737221
+                    },
+                    {
+                        "tradeId": 85296285,
+                        "side": "False",
+                        "rate": "0.0184",
+                        "quantity": "0.0018",
+                        "date": 1701055737221
+                    },...]
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_FLOATING_TRADES_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ID_OR_CODE: market_id,
+        dict_query_params = {constants.INSTRUMENT_ID: instrument_id,
                              constants.QUERY_KEY_LIMIT: limit}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_historical_mid(self, token_id: int = None, fixed_rate_market_ids: list = None) -> dict:
+    def get_historical_mid(self, token_id: int | None = None,
+                           fixed_rate_instrument_ids: list[str] | None = None) -> dict:
         """ Get historical mid rates.
 
         This gets both the current last & mid rate, and the last & mid rate from 24 hours ago, as well as the last and
         mid rate deltas. If token id is specified, only values for this token will be provided; otherwise values
-        for *all* tokens will be provided. If any fixed_rate_market_ids are specified, they will also be included;
+        for *all* tokens will be provided. If any fixed_rate_instrument_ids are specified, they will also be included;
         otherwise *all* fixed rate markets will be included alongside the floating rate.
 
         Args:
             token_id (int): Token ID (Default value is None.)
-            fixed_rate_market_ids (list): List of fixed rate market ids. (Default value is None.)
+            fixed_rate_instrument_ids (list): List of fixed rate instrument ids. (Default value is None.)
 
         Returns:
             response: Session response from requesting historical mid rates. For example:
-
-            {'1': [{'marketId': 1,
-                'tokenId': 1,
-                'rate': '0.022',
-                'midRate': '0.022',
-                'volume24': '22600',
-                'rate24': '0.0231',
-                'midRate24': '0.0231',
-                'rateDelta24': '-0.0011',
-                'midRateDelta24': '-0.0011'},
-                {'marketId': 15172,
-                'tokenId': 1,
-                'daysToMaturity': 343,
-                'maturityDate': 1719532800000,
-                'rate': '0.0519',
-                'midRate': '0.05305',
-                'volume24': '927',
-                'rate24': '0.0554',
-                'midRate24': '0.0534',
-                'rateDelta24': '-0.0035',
-                'midRateDelta24': '-0.00035'}]}
-
+            {
+                "1": [ // token Id
+                    {
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "tokenId": 1,
+                        "rate": "0.022",
+                        "midRate": "0.022",
+                        "volume24": "50756",
+                        "rate24": "0.0184",
+                        "midRate24": "0.0184",
+                        "aaveLendRate": "0.00998329795579504129",
+                        "aaveBorrowRate": "0.03104622531939249144",
+                        "rateDelta24": "0.0036",
+                        "midRateDelta24": "0.0036"
+                    },
+                    {
+                        "marketId": 11996,
+                        "instrumentId": "ETH-2023-11-29",
+                        "tokenId": 1,
+                        "daysToMaturity": 2,
+                        "rate": "0.0409",
+                        "midRate": "0.0388",
+                        "volume24": "26755",
+                        "rate24": "0",
+                        "midRate24": "0",
+                        "rateDelta24": "0.0409",
+                        "midRateDelta24": "0.0388",
+                        "maturityDate": 1701216000000
+                    }
+                ]
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_24H_SNAPSHOT_ENDPOINT
 
@@ -1284,14 +1190,14 @@ class RestClient:
         if token_id is not None:
             dict_query_params.update({constants.QUERY_KEY_TOKEN_ID: token_id})
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_historical_rates(self, token_id: int, fixed_rate_market_ids: list = None,
+    def get_historical_rates(self, token_id: int, fixed_rate_instrument_ids: list[str] | None = None,
                              days_to_include: int = 365) -> dict:
         """ Get historical rate details by token id.
 
@@ -1299,209 +1205,50 @@ class RestClient:
 
         Args:
             token_id (int): Token ID
-            fixed_rate_market_ids (list): List of fixed rate Market IDs. (Default value is None.)
+            fixed_rate_instrument_ids (list): List of fixed rate instrument IDs. (Default value is None.)
             days_to_include (int): Number of days to include. (Default value is 365.)
 
         Returns:
-            response: Session response from requesting historical floating & fixed rates for a given token id. For
-                example:
-
-            {'floating': [{'date': 1689552000000,
-                'open': '0.0202',
-                'close': '0.0089',
-                'high': '0.0255',
-                'low': '0.0088',
-                'volume': '19314',
-                'totalValue': '0',
-                'usdValue': '1911.26722503',
-                'lendDepth': 125565,
-                'borrowDepth': 13077,
-                'numDaysAgo': 4,
-                'code': 'ETH-SPOT',
-                'tokenId': 1},
-                {'date': 1689638400000,
-                'open': '0.0089',
-                'close': '0.0089',
-                'high': '0.0246',
-                'low': '0.0087',
-                'volume': '24138',
-                'totalValue': '0',
-                'usdValue': '1897.6675',
-                'lendDepth': 127115,
-                'borrowDepth': 11537,
-                'numDaysAgo': 3,
-                'code': 'ETH-SPOT',
-                'tokenId': 1},
-                {'date': 1689724800000,
-                'open': '0.0089',
-                'close': '0.0088',
-                'high': '0.0245',
-                'low': '0.0082',
-                'volume': '24465',
-                'totalValue': '0',
-                'usdValue': '1888.75898924',
-                'lendDepth': 127463,
-                'borrowDepth': 11198,
-                'numDaysAgo': 2,
-                'code': 'ETH-SPOT',
-                'tokenId': 1},
-                {'date': 1689811200000,
-                'open': '0.0088',
-                'close': '0.0101',
-                'high': '0.0252',
-                'low': '0.0088',
-                'volume': '24627',
-                'totalValue': '0',
-                'usdValue': '1891.565',
-                'lendDepth': 125350,
-                'borrowDepth': 13290,
-                'numDaysAgo': 1,
-                'code': 'ETH-SPOT',
-                'tokenId': 1}],
-                'fixed': {'161': [{'date': 1689552000000,
-                'open': '0.0429',
-                'close': '0.0384',
-                'high': '0.0575',
-                'low': '0.032',
-                'volume': '823',
-                'totalValue': '4316',
-                'usdValue': '1911.26722503',
-                'lendDepth': 100,
-                'borrowDepth': 96,
-                'numDaysAgo': 4,
-                'daysToMaturity': 161},
-                {'date': 1689638400000,
-                'open': '0.0378',
-                'close': '0.0374',
-                'high': '0.0575',
-                'low': '0.0319',
-                'volume': '933',
-                'totalValue': '4316',
-                'usdValue': '1897.6675',
-                'lendDepth': 99,
-                'borrowDepth': 97,
-                'numDaysAgo': 3,
-                'daysToMaturity': 161},
-                {'date': 1689724800000,
-                'open': '0.0378',
-                'close': '0.0367',
-                'high': '0.0572',
-                'low': '0.031',
-                'volume': '954',
-                'totalValue': '4316',
-                'usdValue': '1888.75898924',
-                'lendDepth': 105,
-                'borrowDepth': 102,
-                'numDaysAgo': 2,
-                'daysToMaturity': 161},
-                {'date': 1689811200000,
-                'open': '0.037',
-                'close': '0.0364',
-                'high': '0.0581',
-                'low': '0.0306',
-                'volume': '977',
-                'totalValue': '4316',
-                'usdValue': '1891.565',
-                'lendDepth': 88,
-                'borrowDepth': 85,
-                'numDaysAgo': 1,
-                'daysToMaturity': 161}],
-                '1': [{'date': 1689552000000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1907.83',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 4,
-                'daysToMaturity': 1},
-                {'date': 1689638400000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1907.83',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 3,
-                'daysToMaturity': 1},
-                {'date': 1689724800000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1888.75898924',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 2,
-                'daysToMaturity': 1},
-                {'date': 1689811200000,
-                'open': '0.039',
-                'close': '0.0263',
-                'high': '0.0451',
-                'low': '0.0214',
-                'volume': '666',
-                'totalValue': '0',
-                'usdValue': '1891.565',
-                'lendDepth': 75,
-                'borrowDepth': 71,
-                'numDaysAgo': 1,
-                'daysToMaturity': 1}],
-                '2': [{'date': 1689552000000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1918.64664034',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 4,
-                'daysToMaturity': 2},
-                {'date': 1689638400000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1918.64664034',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 3,
-                'daysToMaturity': 2},
-                {'date': 1689724800000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1918.64664034',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 2,
-                'daysToMaturity': 2},
-                {'date': 1689811200000,
-                'open': '0',
-                'close': '0',
-                'high': '0',
-                'low': '0',
-                'volume': '0',
-                'totalValue': '0',
-                'usdValue': '1891.565',
-                'lendDepth': 0,
-                'borrowDepth': 0,
-                'numDaysAgo': 1,
-                'daysToMaturity': 2}]}}
+            response: Session response from requesting historical floating & fixed rates for a given token id.
+            For example:
+            {
+                "floating": [
+                    {
+                        "date": 1700524800000,
+                        "open": "0.0198",
+                        "close": "0.1051",
+                        "high": "0.15",
+                        "low": "0.0197",
+                        "volume": "189069",
+                        "totalValue": "0",
+                        "usdValue": "1934.89760794",
+                        "lendDepth": 52686,
+                        "borrowDepth": 1667446467,
+                        "numDaysAgo": 7,
+                        "instrumentId": "ETH-SPOT",
+                        "tokenId": 1
+                    }
+                ],
+                "fixed": {
+                    "1": [ // dayToMaturity
+                        {
+                            "date": 1700524800000,
+                            "open": "0",
+                            "close": "0",
+                            "high": "0",
+                            "low": "0",
+                            "volume": "0",
+                            "totalValue": "0",
+                            "usdValue": "2084.15",
+                            "lendDepth": 0,
+                            "borrowDepth": 0,
+                            "numDaysAgo": 7,
+                            "daysToMaturity": 1,
+                            "instrumentId": "ETH-2023-11-28"
+                        }
+                    ]
+                }
+            }
 
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_HISTORICAL_RATES_ENDPOINT
@@ -1511,8 +1258,8 @@ class RestClient:
             constants.QUERY_KEY_DAYS_TO_INCLUDE: days_to_include
         }
 
-        if fixed_rate_market_ids is not None:
-            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS: fixed_rate_market_ids})
+        if fixed_rate_instrument_ids is not None:
+            dict_query_params.update({constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS: fixed_rate_instrument_ids})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.get(url=url)
@@ -1553,84 +1300,104 @@ class RestClient:
 
         Returns:
             response: Session response from requesting the fixed rate historical yield curve for a given token id.
-                For example:
-
-                {'historicalCurve': {'2023-07-16': [{'marketId': 10276,
-                    'rate': '0',
-                    'label': '1D',
-                    'xpos': 0},
-                    {'marketId': 10277, 'rate': '0', 'label': '2D', 'xpos': 1},
-                    {'marketId': 10280, 'rate': '0.04525', 'label': '1W', 'xpos': 2},
-                    {'marketId': 10287, 'rate': '0.0473', 'label': '2W', 'xpos': 3},
-                    {'marketId': 10294, 'rate': '0.0469', 'label': '3W', 'xpos': 4},
-                    {'marketId': 10287, 'rate': '0.0473', 'label': '1M', 'xpos': 5},
-                    {'marketId': 10315, 'rate': '0.04975', 'label': '2M', 'xpos': 6},
-                    {'marketId': 10350, 'rate': '0.05275', 'label': '3M', 'xpos': 7},
-                    {'marketId': 10350, 'rate': '0.05275', 'label': '1Q', 'xpos': 8},
-                    {'marketId': 12146, 'rate': '0.0539', 'label': '2Q', 'xpos': 9},
-                    {'marketId': 12608, 'rate': '0.0504', 'label': '3Q', 'xpos': 10},
-                    {'marketId': 15172, 'rate': '0.0543', 'label': '4Q', 'xpos': 11}],
-                    '2023-07-17': [{'marketId': 10277,
-                    'rate': '0.0378',
-                    'label': '1D',
-                    'xpos': 0},
-                    {'marketId': 10278, 'rate': '0.0431', 'label': '2D', 'xpos': 1},
-                    {'marketId': 10280, 'rate': '0.04515', 'label': '1W', 'xpos': 2},
-                    {'marketId': 10287, 'rate': '0.04665', 'label': '2W', 'xpos': 3},
-                    {'marketId': 10294, 'rate': '0.04955', 'label': '3W', 'xpos': 4},
-                    {'marketId': 10287, 'rate': '0.04665', 'label': '1M', 'xpos': 5},
-                    {'marketId': 10315, 'rate': '0.05375', 'label': '2M', 'xpos': 6},
-                    {'marketId': 10350, 'rate': '0.0528', 'label': '3M', 'xpos': 7},
-                    {'marketId': 10350, 'rate': '0.0528', 'label': '1Q', 'xpos': 8},
-                    {'marketId': 12146, 'rate': '0.052', 'label': '2Q', 'xpos': 9},
-                    {'marketId': 12608, 'rate': '0.05225', 'label': '3Q', 'xpos': 10},
-                    {'marketId': 15172, 'rate': '0.05625', 'label': '4Q', 'xpos': 11}],
-                    '2023-07-18': [{'marketId': 10278,
-                    'rate': '0.0377',
-                    'label': '1D',
-                    'xpos': 0},
-                    {'marketId': 10279, 'rate': '0.0414', 'label': '2D', 'xpos': 1},
-                    {'marketId': 10280, 'rate': '0.0443', 'label': '1W', 'xpos': 2},
-                    {'marketId': 10287, 'rate': '0.0464', 'label': '2W', 'xpos': 3},
-                    {'marketId': 10294, 'rate': '0.05285', 'label': '3W', 'xpos': 4},
-                    {'marketId': 10287, 'rate': '0.0464', 'label': '1M', 'xpos': 5},
-                    {'marketId': 10315, 'rate': '0.05215', 'label': '2M', 'xpos': 6},
-                    {'marketId': 10350, 'rate': '0.0516', 'label': '3M', 'xpos': 7},
-                    {'marketId': 10350, 'rate': '0.0516', 'label': '1Q', 'xpos': 8},
-                    {'marketId': 12146, 'rate': '0.0519', 'label': '2Q', 'xpos': 9},
-                    {'marketId': 12608, 'rate': '0.05575', 'label': '3Q', 'xpos': 10},
-                    {'marketId': 15172, 'rate': '0.05205', 'label': '4Q', 'xpos': 11}],
-                    '2023-07-19': [{'marketId': 10279,
-                    'rate': '0.03665',
-                    'label': '1D',
-                    'xpos': 0},
-                    {'marketId': 10280, 'rate': '0.04195', 'label': '2D', 'xpos': 1},
-                    {'marketId': 10280, 'rate': '0.04195', 'label': '1W', 'xpos': 2},
-                    {'marketId': 10287, 'rate': '0.0446', 'label': '2W', 'xpos': 3},
-                    {'marketId': 10294, 'rate': '0.04655', 'label': '3W', 'xpos': 4},
-                    {'marketId': 10287, 'rate': '0.0446', 'label': '1M', 'xpos': 5},
-                    {'marketId': 10315, 'rate': '0.0526', 'label': '2M', 'xpos': 6},
-                    {'marketId': 10350, 'rate': '0.05315', 'label': '3M', 'xpos': 7},
-                    {'marketId': 10350, 'rate': '0.05315', 'label': '1Q', 'xpos': 8},
-                    {'marketId': 12146, 'rate': '0.0508', 'label': '2Q', 'xpos': 9},
-                    {'marketId': 12608, 'rate': '0.0521', 'label': '3Q', 'xpos': 10},
-                    {'marketId': 15172, 'rate': '0.0561', 'label': '4Q', 'xpos': 11}],
-                    '2023-07-20': [{'marketId': 10280,
-                    'rate': '0.0417',
-                    'label': '1D',
-                    'xpos': 0},
-                    {'marketId': 10281, 'rate': '0.0423857142858', 'label': '2D', 'xpos': 1},
-                    {'marketId': 10280, 'rate': '0.0417', 'label': '1W', 'xpos': 2},
-                    {'marketId': 10287, 'rate': '0.0465', 'label': '2W', 'xpos': 3},
-                    {'marketId': 10294, 'rate': '0.04945', 'label': '3W', 'xpos': 4},
-                    {'marketId': 10287, 'rate': '0.0465', 'label': '1M', 'xpos': 5},
-                    {'marketId': 10315, 'rate': '0.0485', 'label': '2M', 'xpos': 6},
-                    {'marketId': 10350, 'rate': '0.05265', 'label': '3M', 'xpos': 7},
-                    {'marketId': 10350, 'rate': '0.05265', 'label': '1Q', 'xpos': 8},
-                    {'marketId': 12146, 'rate': '0.0541', 'label': '2Q', 'xpos': 9},
-                    {'marketId': 12608, 'rate': '0.0545', 'label': '3Q', 'xpos': 10},
-                    {'marketId': 15172, 'rate': '0.05285', 'label': '4Q', 'xpos': 11}]}}
-
+            For example:
+            {
+                "historicalCurve": {
+                    "2023-11-27": [
+                        {
+                            "marketId": 1,
+                            "instrumentId": "ETH-SPOT",
+                            "rate": "0.0184",
+                            "label": "Float",
+                            "xpos": 0
+                        },
+                        {
+                            "marketId": 11986,
+                            "instrumentId": "ETH-2023-11-27",
+                            "rate": "0.0211166666668",
+                            "label": "1D",
+                            "xpos": 1
+                        },
+                        {
+                            "marketId": 11991,
+                            "instrumentId": "ETH-2023-11-28",
+                            "rate": "0.0211250000002",
+                            "label": "2D",
+                            "xpos": 2
+                        },
+                        {
+                            "marketId": 12006,
+                            "instrumentId": "ETH-2023-12-01",
+                            "rate": "0.02115",
+                            "label": "1W",
+                            "xpos": 3
+                        },
+                        {
+                            "marketId": 12041,
+                            "instrumentId": "ETH-2023-12-08",
+                            "rate": "0.0375",
+                            "label": "2W",
+                            "xpos": 4
+                        },
+                        {
+                            "marketId": 12076,
+                            "instrumentId": "ETH-2023-12-15",
+                            "rate": "0.0371833333329",
+                            "label": "3W",
+                            "xpos": 5
+                        },
+                        {
+                            "marketId": 12146,
+                            "instrumentId": "ETH-2023-12-29",
+                            "rate": "0.03655",
+                            "label": "1M",
+                            "xpos": 6
+                        },
+                        {
+                            "marketId": 12286,
+                            "instrumentId": "ETH-2024-01-26",
+                            "rate": "0.0402",
+                            "label": "2M",
+                            "xpos": 7
+                        },
+                        {
+                            "marketId": 12430,
+                            "instrumentId": "ETH-2024-02-23",
+                            "rate": "0.0406000000004",
+                            "label": "3M",
+                            "xpos": 8
+                        },
+                        {
+                            "marketId": 12146,
+                            "instrumentId": "ETH-2023-12-29",
+                            "rate": "0.03655",
+                            "label": "1Q",
+                            "xpos": 9
+                        },
+                        {
+                            "marketId": 12608,
+                            "instrumentId": "ETH-2024-03-29",
+                            "rate": "0.0411",
+                            "label": "2Q",
+                            "xpos": 10
+                        },
+                        {
+                            "marketId": 15172,
+                            "instrumentId": "ETH-2024-06-28",
+                            "rate": "0.04295",
+                            "label": "3Q",
+                            "xpos": 11
+                        },
+                        {
+                            "marketId": 15632,
+                            "instrumentId": "ETH-2024-09-27",
+                            "rate": "0.04445",
+                            "label": "4Q",
+                            "xpos": 12
+                        }
+                    ]
+                }
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_HISTORICAL_YIELD_CURVE_ENDPOINT
         url = generate_query_url(
@@ -1639,7 +1406,7 @@ class RestClient:
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
-    def get_yield_curve(self, token_id: int) -> dict:
+    def get_yield_curve(self, token_id: int, is_ull_yield_curve: bool = False) -> dict:
         """ Get interpolated yield curve by token id.
 
         This gets the interpolated yield cure for a given token id. Interpolation is provided for each daily datapoint
@@ -1660,73 +1427,46 @@ class RestClient:
 
         Args:
             token_id (int): Token ID
+            is_ull_yield_curve (bool): Whether to return the ULL yield curve. Defaults to False.
 
         Returns:
             response: Session response from requesting the interpolated yield curve for a given token. For example:
-
-            {'interpolatedRates': [{'marketId': 1,
-                'tokenId': 1,
-                'interpolatedPx': '0.0216',
-                'pv01Series': '0',
-                'daysToMaturity': 0,
-                'enable': True},
-                {'marketId': 10279,
-                'tokenId': 1,
-                'maturityDate': 1689811200000,
-                'interpolatedPx': '0.0352',
-                'pv01Series': '0.0000002739462',
-                'daysToMaturity': 0,
-                'enable': True},
-                {'marketId': 10280,
-                'tokenId': 1,
-                'maturityDate': 1689897600000,
-                'interpolatedPx': '0.0417',
-                'pv01Series': '0.0000005478563',
-                'daysToMaturity': 1,
-                'enable': True},
-                {'marketId': 10281,
-                'tokenId': 1,
-                'maturityDate': 1689984000000,
-                'interpolatedPx': '0.0423857142858',
-                'pv01Series': '0.0000008217315',
-                'daysToMaturity': 2,
-                'enable': True},
-                {'marketId': 10282,
-                'tokenId': 1,
-                'maturityDate': 1690070400000,
-                'interpolatedPx': '0.0430714285716',
-                'pv01Series': '0.0000010956051',
-                'daysToMaturity': 3,
-                'enable': True},
-                {'marketId': 10283,
-                'tokenId': 1,
-                'maturityDate': 1690156800000,
-                'interpolatedPx': '0.0437571428574',
-                'pv01Series': '0.0000013694771',
-                'daysToMaturity': 4,
-                'enable': True},
-                {'marketId': 10284,
-                'tokenId': 1,
-                'maturityDate': 1690243200000,
-                'interpolatedPx': '0.0444428571432',
-                'pv01Series': '0.0000016433475',
-                'daysToMaturity': 5,
-                'enable': True}]}
-
+            {
+                "interpolatedRates": [
+                    {
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "tokenId": 1,
+                        "interpolatedPx": "0.0208",
+                        "daysToMaturity": 0,
+                        "enable": "True"
+                    },
+                    {
+                        "marketId": 11991,
+                        "instrumentId": "ETH-2023-11-28",
+                        "tokenId": 1,
+                        "interpolatedPx": "0.0335",
+                        "daysToMaturity": 1,
+                        "enable": "True",
+                        "maturityDate": 1701158400000
+                    }
+                ]
+            }
         """
         url = self._API_BASE_URL + constants.PUBLIC_GET_YIELD_CURVE_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_TOKEN_ID: token_id})
+        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_TOKEN_ID: token_id,
+                                                             constants.QUERY_KEY_FULL_YIELD_CURVE: is_ull_yield_curve})
         response = self._public_session.get(url=url)
         return self._handle_response(response)
 
     # *** Tokens ***
 
-    def get_token_MTMs(self, account_id: int = None) -> dict:
+    def get_token_MTMs(self, account_id: int | None = None) -> dict:
         """ Get user's aggregate total marked to market value for each token by account id.
 
         This gets the user's aggregate marked to market (MTM) value for each token for a given account id. For the
         avoidance of doubt, each token aggregate MTM value combines the MTM value the floating rate position and
-        the MTM values for all fixed rate positions.If no account id is specified, then the user's trading
+        the MTM values for all fixed rate positions. If no account id is specified, then the user's trading
         account is used.
 
         Args:
@@ -1735,38 +1475,35 @@ class RestClient:
         Returns:
             response: Session response from requesting the user's aggregated marked to market values for each token for
             a given account id. Note that the MTM value is in terms of number of tokens (not in USD). For example:
-
-            {'mtm': [{'accountId': 207,
-                'marketId': 12611,
-                'tokenId': 5,
-                'maturityDate': 1711670400000,
-                'mtm': '0.011608208900012629',
-                'key': {'accountId': 207}},
-                {'accountId': 207,
-                'marketId': 12607,
-                'tokenId': 4,
-                'maturityDate': 1711670400000,
-                'mtm': '268.62146865707945',
-                'key': {'accountId': 207}},
-                {'accountId': 207,
-                'marketId': 10315,
-                'tokenId': 1,
-                'maturityDate': 1692921600000,
-                'mtm': '0.1303923223627599',
-                'key': {'accountId': 207}},
-                {'accountId': 207,
-                'marketId': 11027,
-                'tokenId': 2,
-                'maturityDate': 1692921600000,
-                'mtm': '252.2789960926455',
-                'key': {'accountId': 207}},
-                {'accountId': 207,
-                'marketId': 10680,
-                'tokenId': 3,
-                'maturityDate': 1692921600000,
-                'mtm': '281.40323214784456',
-                'key': {'accountId': 207}}]}
-
+            {
+                "mtm": [
+                    {
+                        "accountId": 202,
+                        "tokenId": 1,
+                        "mtm": "-18060.175696994414"
+                    },
+                    {
+                        "accountId": 202,
+                        "tokenId": 2,
+                        "mtm": "-228.02030598304393"
+                    },
+                    {
+                        "accountId": 202,
+                        "tokenId": 3,
+                        "mtm": "-188.4635786372907"
+                    },
+                    {
+                        "accountId": 202,
+                        "tokenId": 4,
+                        "mtm": "-234.866262672426"
+                    },
+                    {
+                        "accountId": 202,
+                        "tokenId": 5,
+                        "mtm": "-13.988802440773487"
+                    }
+                ]
+            }
         """
         if account_id is None:
             account_id = self._account_id
@@ -2025,33 +1762,56 @@ class RestClient:
         """
         return self._order_id_map[order_id]
 
-    def aggregate_orders_by_rate(self, floating_rate_market_id: int = None, fixed_rate_market_ids: list = None,
-                                 account_id: int = None) -> dict:
+    def aggregate_orders_by_rate(self, float_rate_instrument_id: str | None = None,
+                                 fixed_rate_instrument_ids: list[str] | None = None,
+                                 account_id: int | None = None) -> dict:
         """ Get user's orders in rate buckets.
 
         This gets the user's orders in rate buckets for the given floating rate and fixed rate markets. If no account ID
         is specified, then the user's trading account is used.
 
         Args:
-            floating_rate_market_id (int): Floating rate market ID.
-            fixed_rate_market_ids (list): List of fixed rate market IDs.
+            float_rate_instrument_id (str): Floating rate instrument ID.
+            fixed_rate_instrument_ids (list[str]): List of fixed rate instrument IDs.
             account_id (int): Account ID (Default is None.)
 
         Returns:
             response: Session response from requesting the user's orders in rate buckets. For example:
-
-            {'ir': [{'marketId': 1, 'rate': '0.0279', 'quantity': '4.3151', 'side': False},
-                {'marketId': 1, 'rate': '0.033', 'quantity': '2.384', 'side': False},],
-             'fr': [{'marketId': 15172, 'rate': '0.0589', 'quantity': '4.5022', 'side': False},]
+            {
+                "ir": [
+                    {
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "rate": "0.0143",
+                        "quantity": "2.7022",
+                        "side": "True"
+                    },
+                    {
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "rate": "0.0151",
+                        "quantity": "2.7065",
+                        "side": "True"
+                    }
+                ],
+                "fr": [
+                    {
+                        "marketId": 11991,
+                        "instrumentId": "ETH-2023-11-28",
+                        "rate": "0.05",
+                        "quantity": "0.01",
+                        "side": "False"
+                    }
+                ]
             }
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_AGGREGATE_ORDERS_BY_RATE_ENDPOINT
         dict_query_params = {}
-        if floating_rate_market_id is not None:
-            dict_query_params[constants.QUERY_KEY_FLOATING_RATE_MARKET_ID] = floating_rate_market_id
-        if fixed_rate_market_ids is not None and len(fixed_rate_market_ids) > 0:
-            dict_query_params[constants.QUERY_KEY_LIST_FIXED_RATE_MARKET_IDS] = fixed_rate_market_ids
+        if float_rate_instrument_id is not None:
+            dict_query_params[constants.QUERY_KEY_FLOATING_RATE_INSTRUMENT_ID] = float_rate_instrument_id
+        if fixed_rate_instrument_ids is not None and len(fixed_rate_instrument_ids) > 0:
+            dict_query_params[constants.QUERY_KEY_LIST_FIXED_RATE_INSTRUMENT_IDS] = fixed_rate_instrument_ids
 
         if len(dict_query_params) == 0:
             self._logger.error("API [aggregate_orders_by_rate] need to given a floating rate market ID "
@@ -2066,7 +1826,8 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def batch_cancel_fixed_orders(self, client_order_ids: list = None, order_ids: list = None) -> dict:
+    def batch_cancel_fixed_orders(self, client_order_ids: list[str] | None = None, order_ids: list[int] | None = None,
+                                  account_id: int | None = None) -> dict:
         """ Cancel fixed rate order by client order id.
 
         This cancels a fixed rate order as specified by client order id. Either client order id(s) or exchange order
@@ -2075,6 +1836,7 @@ class RestClient:
         Args:
             client_order_ids (list): client order IDs
             order_ids (list): exchange order IDs
+            account_id (int): Account ID (Default is None.)
 
         Returns:
             response: Session response from attempting to cancel a fixed rate order. Note a success boolean and empty
@@ -2083,8 +1845,12 @@ class RestClient:
             {}
 
         """
+        dict_query_params = {}
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_FIXED_ORDERS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ACCOUNT_ID: self._account_id})
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         if client_order_ids is not None and order_ids is not None:
             raise InputParameterError("Please only specify client_order_ids or order_ids, not both.")
@@ -2100,15 +1866,18 @@ class RestClient:
 
         return self._handle_response(response)
 
-    def batch_cancel_floating_orders(self, client_order_ids: list = None, order_ids: list = None) -> dict:
+    def batch_cancel_floating_orders(self, client_order_ids: list[str] | None = None,
+                                     order_ids: list[int] | None = None,
+                                     account_id: int | None = None) -> dict:
         """ Cancel floating rate order by client order id.
 
         This cancels a floating rate order as specified by client order id. Either client order id(s) or exchange order
         id(s) should be specified, but not both. If both are specified, an exception is raised.
 
         Args:
-            client_order_ids (list): client order IDs
-            order_ids (list): exchange order IDs
+            client_order_ids (list[str]): client order IDs
+            order_ids (list[int]): exchange order IDs
+            account_id (int): Account ID (Default is None.)
 
         Returns:
             response: Session response from attempting to cancel a floating rate order. Note a success boolean and empty
@@ -2117,8 +1886,11 @@ class RestClient:
             {}
 
         """
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_FLOATING_ORDERS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ACCOUNT_ID: self._account_id})
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         if client_order_ids is not None and order_ids is not None:
             raise InputParameterError("Please only specify client_order_ids or order_ids, not both.")
@@ -2150,7 +1922,6 @@ class RestClient:
 
         """
 
-        # Done
         url = self._API_BASE_URL + constants.PRIVATE_CANCEL_FIXED_ORDER_ENDPOINT
         url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ORDER_ID: order_id})
         response = self._private_session.post(url=url, cookies=self._response_cookies)
@@ -2177,14 +1948,14 @@ class RestClient:
         response = self._private_session.post(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def create_fixed_order(self, market_id: int, order_type: int, side: int, quantity: float,
-                           client_order_id: str, rate: float = None, passive: int = 0) -> dict:
+    def create_fixed_order(self, instrument_id: str, order_type: int, side: int, quantity: float,
+                           client_order_id: str, rate: float | None = None, passive: int = 0) -> dict:
         """ Create fixed rate order.
 
         This sends a fixed rate order to the Infinity exchange.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (int): Market instrument ID.
             order_type (int): Order type (1 for market order, or 2 for limit order).
             side (int): Side (0 for lend order, or 1 for borrow order).
             quantity (float): Order quantity.
@@ -2203,21 +1974,24 @@ class RestClient:
         Returns:
             response: Session response from attempting to place a fixed rate order. For example:
 
-            {'order': {'orderId': 88957404,
-                'marketId': 15173,
-                'accountId': 207,
-                'side': True,
-                'orderType': 1,
-                'quantity': '1',
-                'fulfilled': '1',
-                'status': 10,
-                'clientOrderId': '05d61624',
-                'passive': False,
-                'orderDate': 1689932004093,
-                'source': 1},
-                'trxs': [{'rate': '0.0475', 'quantity': '1'}],
-                'trxDropped': False}
-
+            {
+                "order": {
+                    "orderId": 272684374,
+                    "marketId": 11991,
+                    "instrumentId": "ETH-2023-11-28",
+                    "accountId": 202,
+                    "side": "False",
+                    "orderType": 2,
+                    "quantity": "0.01",
+                    "fulfilled": "0",
+                    "rate": "0.05",
+                    "status": "on_book",
+                    "clientOrderId": "7eb31378",
+                    "passive": "False",
+                    "orderDate": 1701071692221,
+                    "source": 1
+                }
+            }
         """
         self._check_valid_order_type(order_type=order_type, rate=rate)
         self._check_valid_order_quantity(order_quantity=quantity)
@@ -2225,12 +1999,12 @@ class RestClient:
         url = self._API_BASE_URL + constants.PRIVATE_CREATE_FIXED_ORDER_ENDPOINT
 
         body = {
-            constants.MARKET_ID: market_id,
+            constants.INSTRUMENT_ID: instrument_id,
             constants.ACCOUNT_ID: self._account_id,
             constants.SIDE: side,
             constants.ORDER_TYPE: order_type,
             constants.QUANTITY: str(quantity),
-            constants.CLIENT_ORDER_ID: client_order_id,
+            constants.CLIENT_ORDER_ID: str(client_order_id),
             constants.PASSIVE: passive
         }
 
@@ -2240,14 +2014,14 @@ class RestClient:
         response = self._private_session.post(url=url, json=body, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def create_floating_order(self, market_id: int, order_type: int, side: int, quantity: float,
-                              client_order_id: str, rate: float = None, passive: int = 0) -> dict:
+    def create_floating_order(self, instrument_id: str, order_type: int, side: int, quantity: float,
+                              client_order_id: str, rate: float | None = None, passive: int = 0) -> dict:
         """ Create floating rate order.
 
         This sends a floating rate order to the Infinity exchange.
 
         Args:
-            market_id (int): Market ID.
+            instrument_id (str): instrument ID.
             order_type (int): Order type. (1 for market order, or 2 for limit order.)
             side (int): Side, (0 for lend order, or 1 for borrow order.)
             quantity (float): Order quantity.
@@ -2266,23 +2040,24 @@ class RestClient:
         Returns:
             response: Session response from attempting to place a floating rate order. For example:
 
-            {'order': {'orderId': 32438701,
-                'marketId': 2,
-                'accountId': 207,
-                'side': True,
-                'orderType': 1,
-                'quantity': '1',
-                'fulfilled': '1',
-                'status': 10,
-                'clientOrderId': '05d61624',
-                'passive': False,
-                'orderDate': 1689932101268,
-                'source': 1},
-                'trxs': [{'rate': '0.0311', 'quantity': '0.14'},
-                {'rate': '0.0311', 'quantity': '0.35'},
-                {'rate': '0.0311', 'quantity': '0.51'}],
-                'trxDropped': False}
-
+            {
+                "order": {
+                    "orderId": 105241907,
+                    "marketId": 1,
+                    "instrumentId": "ETH-SPOT",
+                    "accountId": 202,
+                    "side": "False",
+                    "orderType": 2,
+                    "quantity": "0.01",
+                    "fulfilled": "0",
+                    "rate": "0.5",
+                    "status": "on_book",
+                    "clientOrderId": "51afa3eb",
+                    "passive": "False",
+                    "orderDate": 1701071497306,
+                    "source": 1
+                }
+            }
         """
         self._check_valid_order_type(order_type=order_type, rate=rate)
         self._check_valid_order_quantity(order_quantity=quantity)
@@ -2290,7 +2065,7 @@ class RestClient:
         url = self._API_BASE_URL + constants.PRIVATE_CREATE_FLOATING_ORDER_ENDPOINT
 
         body = {
-            constants.MARKET_ID: market_id,
+            constants.INSTRUMENT_ID: instrument_id,
             constants.ACCOUNT_ID: self._account_id,
             constants.SIDE: side,
             constants.ORDER_TYPE: order_type,
@@ -2304,19 +2079,21 @@ class RestClient:
         response = self._private_session.post(url=url, json=body, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_fixed_orders(self, market_id: int = None, pending_only: bool = None, done_only: bool = None,
-                         start_id: int = None, limit: int = 10) -> dict:
+    def get_fixed_orders(self, instrument_id: str | None = None, account_id: int | None = None,
+                         pending_only: bool | None = None, done_only: bool | None = None,
+                         start_id: int | None = None, limit: int = 10) -> dict:
         """ Get a user's fixed rate orders.
 
         This gets the user's most recent fixed rate orders for their default trading account, ordered by order id. Fixed
-        rate orders can be retrieved for a given fixed rate market id, or if not specified for all fixed rate market
+        rate orders can be retrieved for a given fixed rate market instrument id, or if not specified for all fixed rate market
         ids. It can retrieve all orders, only pending orders, or only done orders. The order start ID and the
         maximum number of orders retrieved can optionally be set. If start ID is not set, then orders starting from
         the earliest order will be returned; if the maximum number of orders is not set, then a maximum of 10 orders
         will be returned.
 
         Args:
-            market_id (int): Market ID. (Default value is None.)
+            instrument_id (str): instrument id of fixed rate market. (Default value is None.)
+            account_id (int): account id. (Default value is None.)
             pending_only (bool): Include pending orders (True) or not (None). (Default value is None.)
             done_only (bool): Include completed orders (True) or not (None). (Default value is None.)
             start_id (int): Starting order ID. (Default value is None.)
@@ -2325,73 +2102,41 @@ class RestClient:
         Returns:
             response: Session response from attempting to list a user's fixed rate orders. For example:
 
-        "orders": [
-            {
-                "orderId": 209148743,
-                "marketId": 11820,
-                "accountId": 128,
-                "side": true,
-                "orderType": 1,
-                "quantity": "0.0465",
-                "fulfilled": "0.0465",
-                "status": 10,
-                "clientOrderId": "y1VuIaUx",
-                "passive": false,
-                "orderDate": 1697596383000,
-                "source": 1,
-                "updateDate": 1697596383000,
-                "daysToMaturity": 10,
-                "code": "WBTC-2023-10-27",
-                "averageTradeRate": "0.0579",
-                "trades": [
-                    {
-                        "side": true,
-                        "rate": "0.0579",
-                        "quantity": "0.0465",
-                        "date": 1697596383000
-                    }
-                ],
-                "maturityDate": 1698390000000
-            },
-            {
-                "orderId": 209148742,
-                "marketId": 15173,
-                "accountId": 128,
-                "side": false,
-                "orderType": 1,
-                "quantity": "1391.02",
-                "fulfilled": "1391.02",
-                "status": 10,
-                "clientOrderId": "iiQ6DCSq",
-                "passive": false,
-                "orderDate": 1697596383000,
-                "source": 1,
-                "updateDate": 1697596383000,
-                "daysToMaturity": 255,
-                "code": "USDT-2024-06-28",
-                "averageTradeRate": "0.0541",
-                "trades": [
-                    {
-                        "side": false,
-                        "rate": "0.0541",
-                        "quantity": "1391.02",
-                        "date": 1697596383000
-                    }
-                ],
-                "maturityDate": 1719558000000
-            }]}
-
+        {
+            "orders": [
+                {
+                    "orderId": 272684374,
+                    "marketId": 11991,
+                    "instrumentId": "ETH-2023-11-28",
+                    "accountId": 202,
+                    "side": "False",
+                    "orderType": 2,
+                    "quantity": "0.01",
+                    "fulfilled": "0",
+                    "rate": "0.05",
+                    "status": "manually_cancelled",
+                    "clientOrderId": "7eb31378",
+                    "passive": "False",
+                    "orderDate": 1701071692221,
+                    "source": 1,
+                    "updateDate": 1701071806691,
+                    "daysToMaturity": 1,
+                    "maturityDate": 1701158400000
+                },...]
+        }
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_FIXED_ORDERS_ENDPOINT
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
 
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: self._account_id}
         if pending_only:
             dict_query_params[constants.QUERY_KEY_PENDING] = pending_only
         if done_only:
             dict_query_params[constants.QUERY_KEY_DONE] = done_only
 
-        if market_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_MARKET_ID: market_id})
+        if instrument_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
 
         if start_id is not None:
             dict_query_params.update({constants.QUERY_KEY_START_ID: start_id})
@@ -2403,19 +2148,21 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_floating_orders(self, market_id: int = None, pending_only: bool = None, done_only: bool = None,
-                            start_id: int = None, limit: int = 10) -> dict:
+    def get_floating_orders(self, instrument_id: str | None = None, account_id: int | None = None,
+                            pending_only: bool | None = None, done_only: bool | None = None,
+                            start_id: int | None = None, limit: int = 10) -> dict:
         """ Get a user's floating rate orders.
 
         This gets the user's most recent floating rate orders for their default trading account, ordered by order id.
-        Floating rate orders can be retrieved for a given floating rate market id, or if not specified for all
-        floating rate market ids. It can retrieve all orders, only pending orders, or only done orders. The order
+        Floating rate orders can be retrieved for a given floating rate instrument id, or if not specified for all
+        floating rate instrument ids. It can retrieve all orders, only pending orders, or only done orders. The order
         start ID and the maximum number of orders retrieved can optionally be set. If start ID is not set, then
         orders starting from the earliest order will be returned; if the maximum number of orders is not set, then a
         maximum of 10 orders will be returned.
 
         Args:
-            market_id (int): Market ID. (Default value is None.)
+            instrument_id (str): instrument id of the floating market. (Default value is None.)
+            account_id (int): account id. (Default value is None.)
             pending_only (bool): get pending orders only (True) or not (None). (Default value is None.)
             done_only (bool): get completed orders only (True) or not (None). (Default value is None.)
             start_id (int): Starting order ID. (Default value is None.)
@@ -2424,64 +2171,41 @@ class RestClient:
         Returns:
             response: Session response from attempting to list a user's floating rate orders. For example:
 
-            {'orders': [{'orderId': 31716831,
-                'marketId': 1,
-                'accountId': 207,
-                'side': False,
-                'orderType': 2,
-                'quantity': '2',
-                'fulfilled': '2',
-                'rate': '0.0155',
-                'status': 10,
-                'clientOrderId': '7fe2de4a',
-                'passive': False,
-                'orderDate': 1689583845000,
-                'source': 1,
-                'updateDate': 1689583844000,
-                'averageTradeRate': '0.0235',
-                'trades': [{'side': False,
-                'rate': '0.0235',
-                'quantity': '0.0215',
-                'date': 1689583845000},
-                {'side': False,
-                'rate': '0.0235',
-                'quantity': '0.0215',
-                'date': 1689583845000},
-                {'side': False,
-                'rate': '0.0235',
-                'quantity': '0.0017',
-                'date': 1689583845000},
-                {'side': False,
-                'rate': '0.0235',
-                'quantity': '0.0002',
-                'date': 1689583845000},
-                {'side': False,
-                'rate': '0.0235',
-                'quantity': '0.1919',
-                'date': 1689583845000},
-                {'side': False,
-                'rate': '0.0235',
-                'quantity': '0.1313',
-                'date': 1689583845000},
-                {'side': False,
-                'rate': '0.0235',
-                'quantity': '1.6319',
-                'date': 1689583845000}]}]}
-
+            {
+                "orders": [
+                    {
+                        "orderId": 105241907,
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "accountId": 202,
+                        "side": "False",
+                        "orderType": 2,
+                        "quantity": "0.01",
+                        "fulfilled": "0",
+                        "rate": "0.5",
+                        "status": "manually_cancelled",
+                        "clientOrderId": "51afa3eb",
+                        "passive": "False",
+                        "orderDate": 1701071497306,
+                        "source": 1,
+                        "updateDate": 1701071841660
+                    },...]
+            }
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_FLOATING_ORDERS_ENDPOINT
-
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: self._account_id}
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         if pending_only:
             dict_query_params[constants.QUERY_KEY_PENDING] = pending_only
         if done_only:
             dict_query_params[constants.QUERY_KEY_DONE] = done_only
 
-        if market_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_MARKET_ID: market_id})
+        if instrument_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
 
         if start_id is not None:
-            dict_query_params.update({constants.QUERY_KEY_START_ID: market_id})
+            dict_query_params.update({constants.QUERY_KEY_START_ID: start_id})
 
         if limit is not None:
             dict_query_params.update({constants.QUERY_KEY_LIMIT: limit})
@@ -2490,79 +2214,57 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_floating_positions(self, market_id: int, account_id: int = None) -> dict:
-        """ Get user's current floating rate positions for a given market id.
+    def get_floating_positions(self, instrument_id: str | None = None, account_id: int | None = None) -> dict:
+        """ Get user's current floating rate positions for a given instrument id.
 
-        This gets the user's current floating rate positions for a given market id and account id. If no account id is
+        This gets the user's current floating rate positions for a given instrument id and account id. If no account id is
         specified, then the user's trading account is used.
 
         Args:
-            market_id (int): Market ID
+            instrument_id (str): instrument id of the floating market.
             account_id (int): Account ID (Default is None.)
 
-        Returns:
-            response: Session response from requesting the user's current floating rate positions for a given market id.
-                For example:
+        Returns: response: Session response from requesting the user's current floating rate positions for a given
+        instrument id. For example:
 
-            {'positions': [{'accountId': 207,
-                'marketId': 1,
-                'priceIndex': '1.0363554964442',
-                'quantity': '19.18546',
-                'updateDate': 1689583844000,
-                'tokenId': 1},
-                {'accountId': 207,
-                'marketId': 2,
-                'priceIndex': '1.0875142907955',
-                'quantity': '-31006.09',
-                'updateDate': 1688113070000,
-                'tokenId': 3},
-                {'accountId': 207,
-                'marketId': 5,
-                'priceIndex': '1.0274377772225',
-                'quantity': '-31737.86',
-                'updateDate': 1688359625000,
-                'tokenId': 2},
-                {'accountId': 207,
-                'marketId': 7,
-                'priceIndex': '1.0669547096324',
-                'quantity': '-24004.26',
-                'updateDate': 1686548033000,
-                'tokenId': 4},
-                {'accountId': 207,
-                'marketId': 8,
-                'priceIndex': '1.0573185320382',
-                'quantity': '-1.552',
-                'updateDate': 1686548033000,
-                'tokenId': 5}]}
-
+            {
+                "positions": [
+                    {
+                        "accountId": 202,
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "priceIndex": "1.0431946135629",
+                        "quantity": "-702938.5559",
+                        "updateDate": 1701055737000
+                    }
+                ]
+            }
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_FLOATING_POSITIONS_ENDPOINT
-
-        dict_query_params = {
-            constants.QUERY_KEY_MARKET_ID: market_id,
-        }
-
-        if account_id is not None:
-            dict_query_params[constants.QUERY_KEY_ACCOUNT_ID] = account_id
+        if account_id is None:
+            account_id = self._account_id
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
+        if instrument_id is not None:
+            dict_query_params.update({constants.QUERY_KEY_INSTRUMENT_ID: instrument_id})
 
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_private_floating_trades(self, account_id: int = None, market_id: int = None,
-                                    start_trx_id: int = None, limit: int = 20) -> dict:
+    def get_private_floating_trades(self, account_id: int | None = None, instrument_id: str | None = None,
+                                    start_trx_id: int | None = None, limit: int = 20) -> dict:
         """ Get user's floating rate transactions by account id.
 
         This gets the user's floating rate transactions for a given account id. If no account id is specified, then the
-            user's trading account is used. If no market id is specified, then all markets are returned. If
+            user's trading account is used. If no instrument id is specified, then all markets are returned. If
             start transaction id is specified then only transactions from that id are returned; otherwise transactions
             from the first transaction are returned. If limit is not specified, then 20 transactions will be returned.
             Note that irrespective of the value of limit, not more than 100 transactions will be returned.
 
         Args:
             account_id (int): Account ID. (Default is None.)
-            market_id (int): Market ID. (Default is all floating rate markets.)
+            instrument_id (str): instrument id of the floating market. (Default is all floating rate markets.)
             start_trx_id (int): Start Transaction ID. (Default is None.)
             limit (int): Maximum number of transactions to return. (Default is 20. Maximum is 100.)
 
@@ -2593,8 +2295,8 @@ class RestClient:
 
         dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
 
-        if market_id is not None:
-            dict_query_params[constants.QUERY_KEY_MARKET_ID] = market_id
+        if instrument_id is not None:
+            dict_query_params[constants.QUERY_KEY_INSTRUMENT_ID] = instrument_id
         if start_trx_id is not None:
             dict_query_params[constants.QUERY_KEY_START_ID] = start_trx_id
         dict_query_params[constants.QUERY_KEY_LIMIT] = limit
@@ -2604,36 +2306,99 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_positions(self, account_id: int = None) -> dict:
+    def get_positions(self, account_id: int | None = None) -> dict:
         """
         Get all user positions by user account id
 
         Returns:
             response: Session response from requesting user positions by account id. For example:
+            {
+                "ir": [
+                    {
+                        "accountId": 202,
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "mtm": "0",
+                        "pv": "-703220.629643912",
+                        "quantity": "-702938.5559",
+                        "interest": "-282.073743912",
+                        "tokenId": 1
+                    }
+                ],
+                "fr": {
+                    "1": [ // token id
+                        {
+                            "accountId": 202,
+                            "marketId": 12006,
+                            "instrumentId": "ETH-2023-12-01",
+                            "rate": "0.15387772",
+                            "mtm": "-42.970918771",
+                            "pv": "-29591.498018771",
+                            "quantity": "-29548.5271",
+                            "tokenId": 1,
+                            "dv01": "0.03237523966737814",
+                            "maturityDate": 1701417600000
+                        }
+                    ],
+                    "2": [
+                        {
+                            "accountId": 202,
+                            "marketId": 12008,
+                            "instrumentId": "USDT-2023-12-01",
+                            "rate": "0.04479815",
+                            "mtm": "0.023237649",
+                            "pv": "-498.84676235",
+                            "quantity": "-498.87",
+                            "tokenId": 2,
+                            "dv01": "0.00054653004432",
+                            "maturityDate": 1701417600000
+                        }
 
-            {'ir': {'accountId': 207,
-                'marketId': 1,
-                'priceIndex': '1.0363554964442',
-                'quantity': '19.18546',
-                'updateDate': 1689583844000},
-                'fr': [{'marketId': 10287,
-                'rate': '0.0548',
-                'quantity': '4.59704',
-                'createDate': 1688112548000,
-                'daysToMaturity': 7,
-                'key': {'rate': '0.0548'}},
-                {'marketId': 10287,
-                'rate': '0.0365',
-                'quantity': '-4.59704',
-                'createDate': 1686591413000,
-                'daysToMaturity': 7,
-                'key': {'rate': '0.0365'}},
-                {'marketId': 10315,
-                'rate': '0.0554',
-                'quantity': '2.8733',
-                'createDate': 1686560057000,
-                'daysToMaturity': 35,
-                'key': {'rate': '0.0554'}}]}
+                    ],
+                    "3": [
+                        {
+                            "accountId": 202,
+                            "marketId": 12007,
+                            "instrumentId": "USDC-2023-12-01",
+                            "rate": "0.0586",
+                            "mtm": "-0.062866093",
+                            "pv": "-492.622866093",
+                            "quantity": "-492.56",
+                            "tokenId": 3,
+                            "dv01": "0.00053962312288",
+                            "maturityDate": 1701417600000
+                        }
+                    ],
+                    "4": [
+                        {
+                            "accountId": 202,
+                            "marketId": 12145,
+                            "instrumentId": "DAI-2023-12-29",
+                            "rate": "0.18082241",
+                            "mtm": "-16.686652175",
+                            "pv": "-1539.686652175",
+                            "quantity": "-1523",
+                            "tokenId": 4,
+                            "dv01": "0.0133202926332",
+                            "maturityDate": 1703836800000
+                        }
+                    ],
+                    "5": [
+                        {
+                            "accountId": 202,
+                            "marketId": 12009,
+                            "instrumentId": "WBTC-2023-12-01",
+                            "rate": "0.02854112",
+                            "mtm": "-0.001522344",
+                            "pv": "5.467577655",
+                            "quantity": "5.4691",
+                            "tokenId": 5,
+                            "dv01": "-0.00000599138756489",
+                            "maturityDate": 1701417600000
+                        }
+                    ]
+                }
+            }
 
         """
         if account_id is None:
@@ -2643,7 +2408,7 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_positions_and_dv01(self, account_id: int = None) -> dict:
+    def get_positions_and_dv01(self, account_id: int | None = None) -> dict:
         """ Get user's fixed rate positions and DV01.
 
         This gets the user's fixed rate positions and DV01 value for a given account id. If no account id is specified,
@@ -2654,33 +2419,26 @@ class RestClient:
 
         Returns:
             response: Session response from requesting the user's fixed rate positions and DV01. For example:
-
             {
                 "posDv01": [
                     {
                         "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
                         "tokenId": 1,
-                        "code": "ETH-SPOT",
-                        "position": "19.18546",
-                        "accountId": "207"
+                        "position": "-702938.5559",
+                        "accountId": "202"
                     },
                     {
-                        "marketId": 2,
-                        "tokenId": 3,
-                        "code": "USDC-SPOT",
-                        "position": "-31006.09",
-                        "accountId": "207"
-                    },
-                    {
-                        "marketId": 5,
-                        "tokenId": 2,
-                        "code": "USDT-SPOT",
-                        "position": "-31737.86",
-                        "accountId": "207"
+                        "marketId": 12041,
+                        "instrumentId": "ETH-2023-12-08",
+                        "tokenId": 1,
+                        "position": "-8129.6739",
+                        "dv01": "0.02448790048474353",
+                        "accountId": "202",
+                        "maturityDate": 1702022400000
                     },...
                 ]
             }
-
         """
         if account_id is None:
             account_id = self._account_id
@@ -2701,10 +2459,21 @@ class RestClient:
         Returns:
             response: Session response from requesting the user's fixed rate positions and DV01. For example:
 
-        {'user':
-            {
-            'userId': 57, 'address': '0x5ef1b2c02f5e39c0ff667611c5d7effb0e7df305', 'userType': 1,
-            'accounts': [{'accountId': 201, 'type': 1}, {'accountId': 202, 'type': 2}]
+        {
+            "user": {
+                "userId": 57,
+                "address": "0x5ef1b2c02f5e40c0ff667612c5d7effb0e7df963",
+                "userType": 1,
+                "accounts": [
+                    {
+                        "accountId": 201,
+                        "type": 1
+                    },
+                    {
+                        "accountId": 202,
+                        "type": 2
+                    }
+                ]
             }
         }
 
@@ -2740,9 +2509,10 @@ class RestClient:
         for account in res["accounts"]:
             if account["type"] == account_type:
                 return account["accountId"]
-        self._logger.error(f"Cannot find {account_type=}")
+        self._logger.error(f"cannot find {account_type=}")
 
-    def get_all_account_tx(self, transaction_type: int = None, start_id: int = None, limit: int = 20) -> dict:
+    def get_all_account_tx(self, transaction_type: int | None = None, start_id: int | None = None,
+                           limit: int = 20) -> dict:
         """ Get all account txs.
 
         This method returns the user's account transactions based on the set filters.
@@ -2753,14 +2523,29 @@ class RestClient:
             limit (int): e.g. 20, 20 by default
 
         Returns:
-            response: Session response from attempting to get user's account transactions. For
-                example:
-
-            {'trxs':
-            [
-            {'trxId': 569579247, 'accountId': 202, 'tokenId': 5, 'type': 5, 'quantity': '-0.000029961', 'balance': '100314.302119868', 'createDate': 1698044481000},
-            {'trxId': 569574035, 'accountId': 202, 'tokenId': 1, 'type': 5, 'quantity': '-0.040512345', 'balance': '100118.459982188', 'createDate': 1698044414000}
-            ]
+            response: Session response from attempting to get user's account transactions. For example:
+            {
+                "trxs": [
+                    {
+                        "trxId": 742551183,
+                        "accountId": 202,
+                        "tokenId": 1,
+                        "type": 5,
+                        "quantity": "-43.83697037",
+                        "balance": "1757611.203652645",
+                        "createDate": 1701072022000
+                    },
+                    {
+                        "trxId": 742551182,
+                        "accountId": 202,
+                        "tokenId": 1,
+                        "type": 5,
+                        "quantity": "0.407328846",
+                        "balance": "1757655.040623015",
+                        "createDate": 1701072022000
+                    },...
+                ]
+            }
 
         """
         url = self._API_BASE_URL + constants.PRIVATE_GET_ALL_ACCOUNT_TX_ENDPOINT
@@ -2773,31 +2558,32 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_max_borrow(self, account_id: int = None) -> dict:
+    def get_max_borrow(self, account_id: int | None = None) -> dict:
         """Get user's maximum borrow by account ID.
 
         Args:
            account_id (int): Account ID to get max borrow for
 
         Returns:
-           response (dict): API response containing max borrow info for the account.
+           response (dict): API response containing max borrow info for the account. For example:
 
             {
                 "accountTokenPositions": [
                     {
                         "accountId": 202,
                         "tokenId": 1,
-                        "rate": "1678.9",
-                        "netAssetValue": "99763.436108497",
-                        "cash": "100118.459982188",
-                        "cashAvailable": "100118.409982188",
-                        "interest": "0",
-                        "netPositions": "-350.372494473",
-                        "mtm": "-4.651379218",
-                        "pv": "-355.023873691",
+                        "price": "2048.623648",
+                        "netAssetValue": "75804.224363624",
+                        "cash": "1757611.203652645",
+                        "cashAvailable": "1741771.339552645",
+                        "interest": "-5111.518933788",
+                        "netPositions": "-1664183.038731983",
+                        "mtm": "-17623.940557038",
+                        "pv": "-1681806.979289021",
                         "netTransfers": "0",
-                        "maxWithdraw": "100118.409982188"
-                    }
+                        "maxWithdraw": "1512754.459379676",
+                        "totalTransfers": "-100"
+                    },...
                 ]
             }
         """
@@ -2812,94 +2598,86 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_account_info(self) -> dict:
+    def get_account_info(self, account_id: int | None = None) -> dict:
         """ Get user details for the default trading accounts
 
         This provided detailed information about the user's default trading account at Infinity exchange,
         including quantity of tokens in that account.
+        Args:
+            account_id (int): Account ID to get info for. If not provided, will use the user's default trading account.
 
         Returns:
             response: Session response from attempting to list details all of a user's default trading account.
-
-            {'account': {'accountId': 207,
-                'userId': 63,
-                'type': 2,
-                'name': 'Trading',
-                'status': 1,
-                'healthScore': 940.4649,
-                'asset': '160143897.613247559',
-                'assetLtv': '128725742.619310902',
-                'liability': '136629.858125498',
-                'ratesMargin': '0.132999378',
-                'ltvType': 1,
-                'updateDate': 1689930687000,
-                'tokens': [{'accountId': 207,
-                'tokenId': 1,
-                'quantity': '4980.780897143',
-                'lockedQuantity': '0',
-                'code': 'ETH',
-                'tokenType': 1,
-                'valueType': 1,
-                'tokenValuationProtocol': 0,
-                'availableQuantity': '4980.780897143'},
-                {'accountId': 207,
-                'tokenId': 2,
-                'quantity': '532648.410376361',
-                'lockedQuantity': '746.67',
-                'code': 'USDT',
-                'tokenType': 1,
-                'valueType': 2,
-                'tokenValuationProtocol': 0,
-                'availableQuantity': '531901.740376361'},
-                {'accountId': 207,
-                'tokenId': 3,
-                'quantity': '530919.679691077',
-                'lockedQuantity': '0',
-                'code': 'USDC',
-                'tokenType': 1,
-                'valueType': 2,
-                'tokenValuationProtocol': 0,
-                'availableQuantity': '530919.679691077'},
-                {'accountId': 207,
-                'tokenId': 4,
-                'quantity': '523981.940962637',
-                'lockedQuantity': '0',
-                'code': 'DAI',
-                'tokenType': 1,
-                'valueType': 2,
-                'tokenValuationProtocol': 0,
-                'availableQuantity': '523981.940962637'},
-                {'accountId': 207,
-                'tokenId': 5,
-                'quantity': '5001.635044613',
-                'lockedQuantity': '0.4268',
-                'code': 'WBTC',
-                'tokenType': 1,
-                'valueType': 1,
-                'tokenValuationProtocol': 0,
-                'availableQuantity': '5001.208244613'}]}}
-
+            For example:
+            {
+                "account": {
+                    "accountId": 202,
+                    "userId": 57,
+                    "type": 2,
+                    "name": "Trading",
+                    "status": 1,
+                    "healthScore": 5686.08303,
+                    "asset": 2757194984.6983743,
+                    "assetLtv": 2213971121.2718234,
+                    "liability": 389362.999307264,
+                    "ratesMargin": 0.03867397,
+                    "ltvType": 1,
+                    "updateDate": 1693214293000,
+                    "tokens": [
+                        {
+                            "accountId": 202,
+                            "tokenId": 1,
+                            "quantity": "1757611.203652645",
+                            "lockedQuantity": "15839.8641",
+                            "code": "ETH",
+                            "tokenType": 1,
+                            "valueType": 1,
+                            "tokenValuationProtocol": 0,
+                            "availableQuantity": "1741771.339552645"
+                        }
+                    ]
+                }
+            }
         """
+        if account_id is None:
+            account_id = self._account_id
         url = self._API_BASE_URL + constants.PRIVATE_GET_ACCOUNT_INFO_ENDPOINT
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: self._account_id}
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def get_account_tx(self, limit: int = 20, transaction_type: str = None, start_id: int = None) -> dict:
+    def get_account_tx(self, limit: int = 20, account_id: int | None = None, transaction_type: str | None = None,
+                       start_id: int | None = None) -> dict:
         """Get account transactions.
 
        Args:
+           account_id (int, optional): Account ID to get transactions for. If not provided, will use the user's default trading account.
            limit (int, optional): Number of transactions to return. Default is 20.
            transaction_type (str, optional): Filter by transaction type.
            start_id (int, optional): Start ID for pagination.
 
        Returns:
-           dict: API response containing list of account transactions.
+           dict: API response containing list of account transactions. For example:
+           {
+                "trxs": [
+                    {
+                        "trxId": 742551183,
+                        "accountId": 202,
+                        "tokenId": 1,
+                        "type": 5,
+                        "quantity": "-43.83697037",
+                        "balance": "1757611.203652645",
+                        "createDate": 1701072022000
+                    },...
+                ]
+            }
        """
         url = self._API_BASE_URL + constants.PRIVATE_GET_ACCOUNT_TX_ENDPOINT
+        if account_id is None:
+            account_id = self._account_id
         dict_query_params = {
-            constants.QUERY_KEY_ACCOUNT_ID: self._account_id,
+            constants.QUERY_KEY_ACCOUNT_ID: account_id,
             constants.QUERY_KEY_LIMIT: limit
         }
         if transaction_type is not None:
@@ -2919,77 +2697,37 @@ class RestClient:
 
         Returns:
             response: Session response from attempting to list all of a user's accounts. For example:
-
-        {'accounts': [{'accountId': 206,
-            'userId': 63,
-            'type': 1,
-            'name': 'Current',
-            'status': 1,
-            'healthScore': 10000.0,
-            'asset': '0',
-            'assetLtv': '0',
-            'liability': '0',
-            'ratesMargin': '0',
-            'ltvType': 1,
-            'updateDate': 1686545770000,
-            'tokens': []},
-            {'accountId': 207,
-            'userId': 63,
-            'type': 2,
-            'name': 'Trading',
-            'status': 1,
-            'healthScore': 940.53351,
-            'asset': '160162912.975086979',
-            'assetLtv': '128741001.039342885',
-            'liability': '136636.081138442',
-            'ratesMargin': '0.133013424',
-            'ltvType': 1,
-            'updateDate': 1689930717000,
-            'tokens': [{'accountId': 207,
-            'tokenId': 1,
-            'quantity': '4980.780897143',
-            'lockedQuantity': '0',
-            'code': 'ETH',
-            'tokenType': 1,
-            'valueType': 1,
-            'tokenValuationProtocol': 0,
-            'availableQuantity': '4980.780897143'},
-            {'accountId': 207,
-            'tokenId': 2,
-            'quantity': '532648.410376361',
-            'lockedQuantity': '746.67',
-            'code': 'USDT',
-            'tokenType': 1,
-            'valueType': 2,
-            'tokenValuationProtocol': 0,
-            'availableQuantity': '531901.740376361'},
-            {'accountId': 207,
-            'tokenId': 3,
-            'quantity': '530919.679691077',
-            'lockedQuantity': '0',
-            'code': 'USDC',
-            'tokenType': 1,
-            'valueType': 2,
-            'tokenValuationProtocol': 0,
-            'availableQuantity': '530919.679691077'},
-            {'accountId': 207,
-            'tokenId': 4,
-            'quantity': '523981.940962637',
-            'lockedQuantity': '0',
-            'code': 'DAI',
-            'tokenType': 1,
-            'valueType': 2,
-            'tokenValuationProtocol': 0,
-            'availableQuantity': '523981.940962637'},
-            {'accountId': 207,
-            'tokenId': 5,
-            'quantity': '5001.635044613',
-            'lockedQuantity': '0.4268',
-            'code': 'WBTC',
-            'tokenType': 1,
-            'valueType': 1,
-            'tokenValuationProtocol': 0,
-            'availableQuantity': '5001.208244613'}]}]}
+            {
+                "accounts": [
+                    {
+                        "accountId": 201,
+                        "userId": 57,
+                        "type": 1,
+                        "name": "Current",
+                        "status": 1,
+                        "healthScore": 10000,
+                        "asset": 0,
+                        "assetLtv": 0,
+                        "liability": 0,
+                        "ratesMargin": 0,
+                        "ltvType": 1,
+                        "updateDate": 1686791547000,
+                        "tokens": [
+                            {
+                                "accountId": 201,
+                                "tokenId": 1,
+                                "quantity": "100",
+                                "lockedQuantity": "0",
+                                "code": "ETH",
+                                "tokenType": 1,
+                                "valueType": 1,
+                                "tokenValuationProtocol": 0,
+                                "availableQuantity": "100"
+                            }
+                        ]
+                    },...
+                ]
+            }
 
         """
 
@@ -2998,14 +2736,14 @@ class RestClient:
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
-    def transfer_floating_position(self, from_account_id: int, to_account_id: int, market_id: int,
+    def transfer_floating_position(self, from_account_id: int, to_account_id: int, instrument_id: str,
                                    quantity: float) -> dict:
         """Transfer position between accounts.
 
        Args:
            from_account_id (int): Account ID to transfer position from
            to_account_id (int): Account ID to transfer position to
-           market_id (int): ID of market for position being transferred
+           instrument_id (str): instrument ID of market for position being transferred
            quantity (float): Quantity of position to transfer
 
        Returns:
@@ -3016,7 +2754,7 @@ class RestClient:
         dict_query_params = {
             constants.QUERY_KEY_FROM_ACCOUNT_ID: from_account_id,
             constants.QUERY_KEY_TO_ACCOUNT_ID: to_account_id,
-            constants.QUERY_KEY_MARKET_ID: market_id,
+            constants.QUERY_KEY_INSTRUMENT_ID: instrument_id,
             constants.QUERY_KEY_QUANTITY: quantity
         }
 
@@ -3081,7 +2819,7 @@ class RestClient:
         url = self._API_BASE_URL + constants.PRIVATE_UPDATE_ACCOUNT_NAME_ENDPOINT
         dict_query_params = {
             constants.QUERY_KEY_ACCOUNT_ID: account_id,
-            constants.QUERY_KEY_NAME: new_name,
+            constants.QUERY_KEY_NAME: new_name
         }
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         response = self._public_session.post(url=url)
