@@ -672,6 +672,10 @@ class WebSocketClient:
         }
         """
         try:
+            symbol = message.get("s", None)
+            # private message object
+            message = message.get("P", None)
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else symbol
             trade_id = message.get("t", None)
             order_id = message.get("o", None)
             account_id = message.get("w", None)
@@ -679,10 +683,16 @@ class WebSocketClient:
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
             trade_time = datetime.utcfromtimestamp(message.get("d", None) / 1000)
-            user_trade = {constants.TRADE_ID: trade_id, constants.ORDER_ID: order_id,
-                          constants.ACCOUNT_ID: account_id,
-                          constants.SIDE: side, constants.RATE: rate,
-                          constants.QUANTITY: quantity, constants.TRADE_TIME: trade_time}
+            user_trade = {
+                constants.INSTRUMENT_ID: instrument_id,
+                constants.TRADE_ID: trade_id,
+                constants.ORDER_ID: order_id,
+                constants.ACCOUNT_ID: account_id,
+                constants.SIDE: side,
+                constants.RATE: rate,
+                constants.QUANTITY: quantity,
+                constants.TRADE_TIME: trade_time
+            }
 
             self._logger.debug(f"User trade: {user_trade=}.")
             self.process_user_trade(user_trade=user_trade)
@@ -734,11 +744,14 @@ class WebSocketClient:
         }
         """
         try:
+            symbol = message.get("s", None)
+            # private message object
+            message = message.get("P", None)
             order_id = message.get("o", None)
             client_order_id = message.get("i", None)
             order_type = constants.LIMIT_ORDER if int(message.get("O", None)) == 2 else constants.MARKET_ORDER
             account_id = message.get("w", None)
-            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else symbol
             market_type = constants.FLOATING if int(message.get("M", None)) == 1 else constants.FIXED_RATE
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
@@ -906,12 +919,11 @@ class WebSocketClient:
         if result is not None and isinstance(result, list) and len(result) > 0:
             self._logger.info(f"Private subscription list: {result}.")
         channel = message_obj.get("e", None)
-        private_message_obj = message_obj.get("P", None)
         if channel is not None:
             if channel == constants.CHANNEL_USER_ORDER:
-                self.on_user_order_data(message=private_message_obj)
+                self.on_user_order_data(message=message_obj)
             elif channel == constants.CHANNEL_USER_TRADE:
-                self.on_user_trade_data(message=private_message_obj)
+                self.on_user_trade_data(message=message_obj)
 
     def on_private_close(self, ws: websocket.WebSocketApp, close_status_code: int, message: str) -> None:
         """
