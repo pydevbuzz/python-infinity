@@ -1840,12 +1840,17 @@ class RestClient:
 
         Returns:
             response: Session response from attempting to cancel a fixed rate order. Note a success boolean and empty
-                data dictionary are returned only. For example:
-
-            {}
-
+            data dictionary are returned only. For example:
+            {
+                "cancelOrders": [
+                    {
+                        "orderId": 278621255,
+                        "clientOrderId": "6b36e3d2",
+                        "success": "True"
+                    }
+                ]
+            }
         """
-        dict_query_params = {}
         if account_id is None:
             account_id = self._account_id
         dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
@@ -1881,10 +1886,16 @@ class RestClient:
 
         Returns:
             response: Session response from attempting to cancel a floating rate order. Note a success boolean and empty
-                data dictionary are returned only. For example:
-
-            {}
-
+            data dictionary are returned only. For example:
+            {
+                "cancelOrders": [
+                    {
+                        "orderId": 106584050,
+                        "clientOrderId": "d36f2fad",
+                        "success": "True"
+                    }
+                ]
+            }
         """
         if account_id is None:
             account_id = self._account_id
@@ -2257,41 +2268,93 @@ class RestClient:
         """ Get user's floating rate transactions by account id.
 
         This gets the user's floating rate transactions for a given account id. If no account id is specified, then the
-            user's trading account is used. If no instrument id is specified, then all markets are returned. If
-            start transaction id is specified then only transactions from that id are returned; otherwise transactions
-            from the first transaction are returned. If limit is not specified, then 20 transactions will be returned.
-            Note that irrespective of the value of limit, not more than 100 transactions will be returned.
+        user's trading account is used. If no instrument id is specified, then all floating rate markets are returned.
+        If start transaction id is specified then only transactions from that id are returned;
+        otherwise transactions from the first transaction are returned.
+        If limit is not specified, then 20 transactions will be returned.
+        Note that irrespective of the value of limit, not more than 100 transactions will be returned.
 
         Args:
             account_id (int): Account ID. (Default is None.)
-            instrument_id (str): instrument id of the floating market. (Default is all floating rate markets.)
+            instrument_id (str): instrument id of the floating rate market. (Default is all floating rate markets.)
             start_trx_id (int): Start Transaction ID. (Default is None.)
             limit (int): Maximum number of transactions to return. (Default is 20. Maximum is 100.)
 
         Returns:
             response: Session response from requesting the user's floating rate transactions. For example:
-
-            {'trxs': [{'trxId': 22879584,
-                'side': False,
-                'rate': '0.0235',
-                'quantity': '1.6319',
-                'date': 1689583845000},
-                {'tr/api/user/rate/trxsxId': 22879583,
-                'side': False,
-                'rate': '0.0235',
-                'quantity': '0.1313',
-                'date': 1689583845000},
-                {'trxId': 22879582,
-                'side': False,
-                'rate': '0.0235',
-                'quantity': '0.1919',
-                'date': 1689583845000}]}
-
+            {
+                "trxs": [
+                    {
+                        "trxId": 85296286,
+                        "marketId": 1,
+                        "instrumentId": "ETH-SPOT",
+                        "side": "False",
+                        "rate": "0.0184",
+                        "quantity": "0.0008",
+                        "orderId": 105241905,
+                        "date": 1701055737000
+                    },...
+                ]
+            }
         """
         if account_id is None:
             account_id = self._account_id
 
         url = self._API_BASE_URL + constants.PRIVATE_GET_FLOATING_TRADES_ENDPOINT
+
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
+
+        if instrument_id is not None:
+            dict_query_params[constants.QUERY_KEY_INSTRUMENT_ID] = instrument_id
+        if start_trx_id is not None:
+            dict_query_params[constants.QUERY_KEY_START_ID] = start_trx_id
+        dict_query_params[constants.QUERY_KEY_LIMIT] = limit
+
+        url = generate_query_url(url=url, dict_query_params=dict_query_params)
+
+        response = self._private_session.get(url=url, cookies=self._response_cookies)
+        return self._handle_response(response)
+
+    def get_private_fixed_trades(self, account_id: int | None = None, instrument_id: str | None = None,
+                                 start_trx_id: int | None = None, limit: int = 20) -> dict:
+        """ Get user's fixed rate transactions by account id.
+
+        This gets the user's fixed rate transactions for a given account id. If no account id is specified, then the
+            user's trading account is used. If no instrument id is specified, then all fixed rate markets are returned.
+            If start transaction id is specified then only transactions from that id are returned;
+            otherwise transactions from the first transaction are returned.
+            If limit is not specified, then 20 transactions will be returned.
+            Note that irrespective of the value of limit, not more than 100 transactions will be returned.
+
+        Args:
+            account_id (int): Account ID. (Default is None.)
+            instrument_id (str): instrument id of the fixed rate market. (Default is all fixed rate markets.)
+            start_trx_id (int): Start Transaction ID. (Default is None.)
+            limit (int): Maximum number of transactions to return. (Default is 20. Maximum is 100.)
+
+        Returns:
+            response: Session response from requesting the user's fixed rate transactions. For example:
+            {
+                "trxs": [
+                    {
+                        "trxId": 146763412,
+                        "marketId": 12001,
+                        "instrumentId": "ETH-2023-11-30",
+                        "side": "False",
+                        "rate": "0.0334",
+                        "quantity": "0.0001",
+                        "lendOrderId": 276866883,
+                        "date": 1701229683449
+                    }
+                ]
+            }
+
+
+        """
+        if account_id is None:
+            account_id = self._account_id
+
+        url = self._API_BASE_URL + constants.PRIVATE_GET_FIXED_TRADES_ENDPOINT
 
         dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
 

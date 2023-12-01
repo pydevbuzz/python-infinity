@@ -129,6 +129,7 @@ PRIVATE_GET_FIXED_ORDERS_ENDPOINT = "/private/get_fixed_orders"
 PRIVATE_GET_FLOATING_ORDERS_ENDPOINT = "/private/get_floating_orders"
 PRIVATE_GET_FLOATING_POSITIONS_ENDPOINT = "/private/get_floating_positions"
 PRIVATE_GET_FLOATING_TRADES_ENDPOINT = "/private/get_floating_trades"
+PRIVATE_GET_FIXED_TRADES_ENDPOINT = "/private/get_fixed_trades"
 PRIVATE_GET_ALL_POSITIONS_ENDPOINT = "/private/get_all_positions"
 PRIVATE_GET_POSITIONS_AND_DV01_ENDPOINT = "/private/get_positions_and_dv01"
 

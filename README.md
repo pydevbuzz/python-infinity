@@ -44,6 +44,13 @@ For feedback or suggestions, please reach out via one of the contact methods spe
 <li>Thread-based Execution</li>
 <li>Exception Handling and Reconnection</li></ol>
 
+
+| Release Version | Changelog                                    |
+|-----------------|----------------------------------------------|
+| `0.0.3`         | Stable release for testnet (**recommended**) |
+| `0.0.4a1`       | alpha version to prepare 0.0.4               |
+
+
 ## Documentation
 For more detailed information, please refer to the [Infinity Exchange Docs](https://developers.infinity.exchange/#change-log).
 
