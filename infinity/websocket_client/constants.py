@@ -1,5 +1,4 @@
 # *** Public Channels ***
-CHANNEL_MARKET_INFO = "marketInfo"
 CHANNEL_RECENT_TRADES = "recentTrades"
 CHANNEL_ORDER_BOOK = "orderBook"
 CHANNEL_USER_TRADE = "userTrade"
@@ -12,7 +11,7 @@ CHANNEL_USER_ORDER = "userOrder"
 TRADE_ID = "trade_id"
 ACCOUNT_ID = "account_id"
 ORDER_ID = "order_id"
-MARKET_ID = "market_id"
+INSTRUMENT_ID = "instrument_id"
 SYMBOL = "symbol"
 RATE = "rate"
 PRICE = "price"
@@ -57,5 +56,3 @@ ORDER_STATUS_TYPE = {
     12: "auto_cancelled",
     13: "partially_filled"
 }
-
-

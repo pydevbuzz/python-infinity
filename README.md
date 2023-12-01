@@ -21,7 +21,7 @@ The package utilizes threads to handle concurrent execution of REST API requests
 This allows for efficient handling of multiple requests and real-time data streams without blocking the main execution thread.
 
 The connector provides a <b>REST client</b> that allows you to make requests to all the available REST API endpoints of the Infinity exchange.
-You can perform actions such as getting market information, retrieving user information, and more.
+You can perform actions such as retrieving user information, and more.
 It also includes a <b>WebSocket client</b> that enables you to subscribe to real-time data streams from the Infinity exchange.
 You can subscribe to channels like orderbook data, user order data etc.
 
@@ -43,6 +43,13 @@ For feedback or suggestions, please reach out via one of the contact methods spe
 <li>Login Client</li>
 <li>Thread-based Execution</li>
 <li>Exception Handling and Reconnection</li></ol>
+
+
+| Release Version | Changelog                                    |
+|-----------------|----------------------------------------------|
+| `0.0.3`         | Stable release for testnet (**recommended**) |
+| `0.0.4a1`       | alpha version to prepare 0.0.4               |
+
 
 ## Documentation
 For more detailed information, please refer to the [Infinity Exchange Docs](https://developers.infinity.exchange/#change-log).
@@ -143,7 +150,7 @@ Usage example:
 
 ```python
 # Public endpoint method example
-market_info_floating_rate = infinity_rest.get_floating_rate(market_id=1)
+market_info_floating_rate = infinity_rest.get_floating_rate(instrument_id=1)
 
 # Private endpoint method example
 user_info = infinity_rest.get_user_info()
@@ -179,42 +186,36 @@ Usage example - channel subscription / unsubscription:
 
 ```python
 # =============================================================================
-# For public WEBSOCKET channel, e.g. market info, orderbook data, recent trades
+# For public WEBSOCKET channel, e.g. orderbook data, recent trades
 # =============================================================================
 
-# Subscribing - market info
-infinity_ws.subscribe_market(symbol="ETH-SPOT")
-
-# Unsubscribing - market info 
-infinity_ws.unsubscribe_market(symbol="ETH-SPOT")
-
 # Subscribing - recent trades
-infinity_ws.subscribe_public_trades(symbol="USDC-SPOT")
+infinity_ws.subscribe_public_trades(instrument_id="USDC-SPOT")
 
 # Unsubscribing - recent trades
-infinity_ws.unsubscribe_public_trades(symbol="USDC-SPOT")
+infinity_ws.unsubscribe_public_trades(instrument_id="USDC-SPOT")
 
 # Subscribing - orderbook data
-infinity_ws.subscribe_orderbook(symbol="WBTC-2023-12-29")
+infinity_ws.subscribe_orderbook(instrument_id="WBTC-2023-12-29")
 
 # Unsubscribing - orderbook data
-infinity_ws.unsubscribe_orderbook(symbol="WBTC-2023-12-29")
+infinity_ws.unsubscribe_orderbook(instrument_id="WBTC-2023-12-29")
 
 # =============================================================================
 # For private WEBSOCKET channel, e.g. user order data, user trade data
 # =============================================================================
 
 # Subscribing - user order data
-infinity_ws.subscribe_user_order(symbol="USDC-2023-11-03")
+infinity_ws.subscribe_user_order(instrument_id="USDC-2023-11-03")
 
 # Unsubscribing - user order data
-infinity_ws.unsubscribe_user_order(symbol="USDC-2023-11-03")
+infinity_ws.unsubscribe_user_order(instrument_id="USDC-2023-11-03")
 
 # Subscribing - user trade data
-infinity_ws.subscribe_user_trade(symbol="DAI-SPOT")
+infinity_ws.subscribe_user_trade(instrument_id="DAI-SPOT")
 
 # Unsubscribing - user trade data
-infinity_ws.unsubscribe_user_trade(symbol="DAI-SPOT")
+infinity_ws.unsubscribe_user_trade(instrument_id="DAI-SPOT")
 ```
 
 Usage example - callbacks for extracting relevant data
@@ -222,10 +223,8 @@ Usage example - callbacks for extracting relevant data
 ```python
 while True:
     # =============================================================================
-    # For public WEBSOCKET channel, e.g. market info, orderbook data, recent trades
+    # For public WEBSOCKET channel, e.g. orderbook data, recent trades
     # =============================================================================
-
-    market_data = infinity_ws.get_received_data(channel="marketInfo")
     public_trade = infinity_ws.get_received_data(channel="recentTrades")
     orderbook = infinity_ws.get_received_data(channel="orderBook")
 
@@ -238,8 +237,6 @@ while True:
 ```
 Infinity Websocket package also provides functions to be overridden for processing websocket data stream.
 ```python
-def process_market_data(self, market_data: dict) -> None:
-    pass # please refer to websocket client's process_market_data
 def process_orderbook_data(self, orderbook: dict) -> None:
     pass # please refer to websocket client's process_orderbook_data
 def process_public_trade(self, public_trade: dict) -> None:

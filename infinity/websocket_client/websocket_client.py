@@ -41,8 +41,7 @@ class WebSocketClient:
             constants.CHANNEL_USER_TRADE: deque([]),
             constants.CHANNEL_ORDER_BOOK: deque([]),
             constants.CHANNEL_USER_ORDER: deque([]),
-            constants.CHANNEL_RECENT_TRADES: deque([]),
-            constants.CHANNEL_MARKET_INFO: deque([])
+            constants.CHANNEL_RECENT_TRADES: deque([])
         }
         self._public_subscribed_channels = set()
         self._private_subscribed_channels = set()
@@ -439,173 +438,143 @@ class WebSocketClient:
             message = self._subscribed_data_dict[channel].popleft()
             return message
 
-    def subscribe_market(self, symbol: str) -> None:
+    def subscribe_orderbook(self, instrument_id: str) -> None:
         """
-        Subscribes to the market channel for a given symbol.
+        Subscribes to the order book channel for a given instrument id.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_MARKET_INFO)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_ORDER_BOOK)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing market for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Subscribing orderbook for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_public_message(message=message)
 
-    def unsubscribe_market(self, symbol: str) -> None:
+    def unsubscribe_orderbook(self, instrument_id: str) -> None:
         """
-        Unsubscribes from the market channel for a given symbol.
+        Unsubscribes from the order book channel for a given instrument id.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_MARKET_INFO)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_ORDER_BOOK)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing market for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Unsubscribing orderbook for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_public_message(message=message)
 
-    def subscribe_orderbook(self, symbol: str) -> None:
+    def subscribe_public_trades(self, instrument_id: str) -> None:
         """
-        Subscribes to the order book channel for a given symbol.
+        Subscribes to the public trades channel for a given instrument id.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_ORDER_BOOK)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_RECENT_TRADES)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing orderbook for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Subscribing public trades channel for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_public_message(message=message)
 
-    def unsubscribe_orderbook(self, symbol: str) -> None:
+    def unsubscribe_public_trades(self, instrument_id: str) -> None:
         """
-        Unsubscribes from the order book channel for a given symbol.
+        Unsubscribes from the public trades channel for a given instrument id.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_ORDER_BOOK)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_RECENT_TRADES)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing orderbook for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Unsubscribing public trades channel for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_public_message(message=message)
 
-    def subscribe_public_trades(self, symbol: str) -> None:
+    def subscribe_user_trade(self, instrument_id: str) -> None:
         """
-        Subscribes to the public trades channel for a given symbol.
-
-        Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
-
-        Returns:
-            None
-        """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_RECENT_TRADES)
-        message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing public trades channel for {symbol=}, {channel_str=}, {message=}.")
-        self.send_public_message(message=message)
-
-    def unsubscribe_public_trades(self, symbol: str) -> None:
-        """
-        Unsubscribes from the public trades channel for a given symbol.
-
-        Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
-
-        Returns:
-            None
-        """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_RECENT_TRADES)
-        message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing public trades channel for {symbol=}, {channel_str=}, {message=}.")
-        self.send_public_message(message=message)
-
-    def subscribe_user_trade(self, symbol: str) -> None:
-        """
-        Subscribes to the user trade channel for a given symbol.
+        Subscribes to the user trade channel for a given instrument id.
         This function is a private function that requires infinity login.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_USER_TRADE)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_TRADE)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing user trade channel for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Subscribing user trade channel for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_private_message(message=message)
 
-    def unsubscribe_user_trade(self, symbol: str) -> None:
+    def unsubscribe_user_trade(self, instrument_id: str) -> None:
         """
-        Unsubscribes from the user trade channel for a given symbol.
+        Unsubscribes from the user trade channel for a given instrument id.
         This function is a private function that requires infinity login.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_USER_TRADE)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_TRADE)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing user trade channel for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Unsubscribing user trade channel for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_private_message(message=message)
 
-    def subscribe_user_order(self, symbol: str) -> None:
+    def subscribe_user_order(self, instrument_id: str) -> None:
         """
-        Subscribes to the user order channel for a given symbol.
+        Subscribes to the user order channel for a given instrument id.
         This function is a private function that requires infinity login.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_USER_ORDER)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_ORDER)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing user order channel for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Subscribing user order channel for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_private_message(message=message)
 
-    def unsubscribe_user_order(self, symbol: str) -> None:
+    def unsubscribe_user_order(self, instrument_id: str) -> None:
         """
-        Unsubscribes from the user order channel for a given symbol.
+        Unsubscribes from the user order channel for a given instrument id.
         This function is a private function that requires infinity login.
 
         Args:
-            symbol (str): The symbol of the market (e.g. ETH-SPOT).
+            instrument_id (str): The instrument id of the market (e.g. ETH-SPOT).
 
         Returns:
             None
         """
-        channel_str = self.generate_param_str(symbol=symbol, channel=constants.CHANNEL_USER_ORDER)
+        channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_ORDER)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing user order channel for {symbol=}, {channel_str=}, {message=}.")
+        self._logger.info(f"Unsubscribing user order channel for {instrument_id=}, {channel_str=}, {message=}.")
         self.send_private_message(message=message)
 
     @staticmethod
-    def generate_param_str(symbol: str, channel: str) -> str:
+    def generate_param_str(instrument_id: str, channel: str) -> str:
         """
         Generate the channel parameter for a websocket subscription/unsubscription.
 
         Args:
-            symbol (str): The symbol for which the subscription is being made.
+            instrument_id (str): The instrument id for which the subscription is being made.
             channel (str): The channel for the subscription.
 
         Returns:
             str: The string representation of the channel parameter.
         """
-        return f"{symbol}@{channel}"
+        return f"{instrument_id}@{channel}"
 
     def on_orderbook_data(self, message: dict) -> None:
         """
@@ -642,8 +611,7 @@ class WebSocketClient:
             }
         """
         try:
-            symbol = message.get("s", None)
-            market_id = int(message.get("m", None))
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
             update_time = datetime.utcfromtimestamp(message.get("E", None) / 1000)
 
             price_dict = message.get("P", None)
@@ -657,7 +625,7 @@ class WebSocketClient:
             bids_book = {float(price_obj.get("p", 0)): float(price_obj.get("q", 0)) for price_obj in bids_list}
             bids_book = {k: bids_book[k] for k in sorted(bids_book)}
 
-            book = {constants.SYMBOL: symbol, constants.MARKET_ID: market_id, constants.UPDATE_TIME: update_time,
+            book = {constants.INSTRUMENT_ID: instrument_id, constants.UPDATE_TIME: update_time,
                     constants.BIDS: bids_book, constants.ASKS: asks_book}
 
             self._logger.debug(f"Orderbook: {book=}.")
@@ -676,85 +644,6 @@ class WebSocketClient:
             None
         """
         self._subscribed_data_dict[constants.CHANNEL_ORDER_BOOK].append(orderbook)
-
-    def on_market_data(self, message: dict) -> None:
-        """
-        The on_market_data method processes market data received from the WebSocket connection.
-
-        Args: message (dict): The market data received from the WebSocket connection.
-
-        Returns:
-            None
-
-        Example:
-        {
-          "e": "marketInfo", (channel name)
-          "E": 1696584283849,
-          "s": "ETH-2023-10-07", (market name)
-          "m": 10358, (market id)
-          "P": {
-            "p": "0.0319", (rate)
-            "m": 10358, (market id)
-            "d": false, (side)
-            "u": 1696584283849, (update time)
-            "M": "0.0321" (mid-rate)
-          }
-        }
-        """
-        try:
-            symbol = message.get("s", None)
-
-            if symbol.split("-")[1] == "SPOT":
-                rates_type = constants.FLOATING
-            else:
-                rates_type = constants.FIXED_RATE
-
-            market_id = int(message.get("m", None))
-            price_dict = message.get("P", None)
-
-            rate = float(price_dict.get("p", 0))
-            update_time = datetime.utcfromtimestamp(price_dict.get("u", None) / 1000)
-            side = constants.BORROW if price_dict.get("d", None) else constants.LEND
-
-            md = {
-                constants.UPDATE_TIME: update_time,
-                constants.SYMBOL: symbol,
-                constants.RATES_TYPE: rates_type,
-                constants.MARKET_ID: market_id,
-                constants.RATE: rate,
-                constants.SIDE: side,
-                constants.MARKET_MID_RATE: None,
-                constants.LAST_INDEX_RATE_UPDATE_TIME: None,
-                constants.BORROW_RATE_INDEX: None,
-                constants.LEND_RATE_INDEX: None,
-            }
-
-            if rates_type == constants.FLOATING:
-                last_rate_index_update = datetime.utcfromtimestamp(price_dict.get("pd", None) / 1000)
-                borrow_rate_index = float(price_dict.get("b", 0))
-                lend_rate_index = float(price_dict.get("l", 0))
-                md.update({constants.LAST_INDEX_RATE_UPDATE_TIME: last_rate_index_update})
-                md.update({constants.BORROW_RATE_INDEX: borrow_rate_index})
-                md.update({constants.LEND_RATE_INDEX: lend_rate_index})
-            else:
-                mid_rate = float(price_dict.get("M", 0))
-                md.update({constants.MARKET_MID_RATE: mid_rate})
-            self._logger.debug(f"Market data {md=}.")
-            self.process_market_data(market_data=md)
-        except Exception as e:
-            self._logger.error(f"Exception thrown in on_market_data raw={message}, {e=}. {traceback.format_exc()}")
-
-    def process_market_data(self, market_data: dict) -> None:
-        """
-        Process market data.
-
-        Args:
-            market_data (dict): The market data to be processed.
-
-        Returns:
-            None
-        """
-        self._subscribed_data_dict[constants.CHANNEL_MARKET_INFO].append(market_data)
 
     def on_user_trade_data(self, message: dict) -> None:
         """
@@ -783,6 +672,10 @@ class WebSocketClient:
         }
         """
         try:
+            symbol = message.get("s", None)
+            # private message object
+            message = message.get("P", None)
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else symbol
             trade_id = message.get("t", None)
             order_id = message.get("o", None)
             account_id = message.get("w", None)
@@ -790,10 +683,16 @@ class WebSocketClient:
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
             trade_time = datetime.utcfromtimestamp(message.get("d", None) / 1000)
-            user_trade = {constants.TRADE_ID: trade_id, constants.ORDER_ID: order_id,
-                          constants.ACCOUNT_ID: account_id,
-                          constants.SIDE: side, constants.RATE: rate,
-                          constants.QUANTITY: quantity, constants.TRADE_TIME: trade_time}
+            user_trade = {
+                constants.INSTRUMENT_ID: instrument_id,
+                constants.TRADE_ID: trade_id,
+                constants.ORDER_ID: order_id,
+                constants.ACCOUNT_ID: account_id,
+                constants.SIDE: side,
+                constants.RATE: rate,
+                constants.QUANTITY: quantity,
+                constants.TRADE_TIME: trade_time
+            }
 
             self._logger.debug(f"User trade: {user_trade=}.")
             self.process_user_trade(user_trade=user_trade)
@@ -825,9 +724,10 @@ class WebSocketClient:
         {
             "e": "userOrder",
             "E": 1696384117706,
-            "s": "ETH-SPOT",
-            "m": 1,
+            "s": "ETH-SPOT", (symbol)
+            "m": 1, (market ID)
             "P": {
+                "I": "ETH-SPOT", (instrument ID)
                 "m": 1, (market ID)
                 "p": "0.01", (price)
                 "q": "0.01", (quantity)
@@ -844,11 +744,14 @@ class WebSocketClient:
         }
         """
         try:
+            symbol = message.get("s", None)
+            # private message object
+            message = message.get("P", None)
             order_id = message.get("o", None)
             client_order_id = message.get("i", None)
             order_type = constants.LIMIT_ORDER if int(message.get("O", None)) == 2 else constants.MARKET_ORDER
             account_id = message.get("w", None)
-            market_id = message.get("m", None)
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else symbol
             market_type = constants.FLOATING if int(message.get("M", None)) == 1 else constants.FIXED_RATE
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
@@ -862,7 +765,7 @@ class WebSocketClient:
                 constants.CLIENT_ORDER_ID: client_order_id,
                 constants.ORDER_TYPE: order_type,
                 constants.ACCOUNT_ID: account_id,
-                constants.MARKET_ID: market_id,
+                constants.INSTRUMENT_ID: instrument_id,
                 constants.MARKET_TYPE: market_type,
                 constants.RATE: rate,
                 constants.QUANTITY: quantity,
@@ -916,12 +819,11 @@ class WebSocketClient:
         }
         """
         try:
-            symbol = message.get("s", None)
-            if symbol.split("-")[1] == "SPOT":
+            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
+            if instrument_id.split("-")[1] == "SPOT":
                 rates_type = constants.FLOATING
             else:
                 rates_type = constants.FIXED_RATE
-            market_id = int(message.get("m", None))
             trade_msg = message.get("P", None)
             if trade_msg is not None:
                 rate = float(trade_msg.get("p", 0))
@@ -929,13 +831,12 @@ class WebSocketClient:
                 side = constants.BORROW if trade_msg.get("s", None) else constants.LEND
                 trade_time = datetime.utcfromtimestamp(trade_msg.get("d", None) / 1000)
                 public_trade = {
-                    constants.SYMBOL: symbol,
-                    constants.MARKET_ID: market_id,
+                    constants.INSTRUMENT_ID: instrument_id,
                     constants.RATES_TYPE: rates_type,
                     constants.TRADE_TIME: trade_time,
                     constants.RATE: rate,
                     constants.QUANTITY: quantity,
-                    constants.SIDE: side,
+                    constants.SIDE: side
                 }
                 self._logger.debug(f"Public trade: {public_trade}.")
                 self.process_public_trade(public_trade=public_trade)
@@ -993,12 +894,10 @@ class WebSocketClient:
         message_obj = json.loads(message)
         result = message_obj.get("data", {}).get("result", None)
         if result is not None and isinstance(result, list) and len(result) > 0:
-            self._logger.info(f"Subscription list: {result}.")
+            self._logger.info(f"Public subscription list: {result}.")
         channel = message_obj.get("e", None)
         if channel is not None:
-            if channel == constants.CHANNEL_MARKET_INFO:
-                self.on_market_data(message=message_obj)
-            elif channel == constants.CHANNEL_RECENT_TRADES:
+            if channel == constants.CHANNEL_RECENT_TRADES:
                 self.on_public_trade(message=message_obj)
             elif channel == constants.CHANNEL_ORDER_BOOK:
                 self.on_orderbook_data(message=message_obj)
@@ -1016,13 +915,15 @@ class WebSocketClient:
         """
         self._logger.debug(f"Received private message: {message=}.")
         message_obj = json.loads(message)
+        result = message_obj.get("data", {}).get("result", None)
+        if result is not None and isinstance(result, list) and len(result) > 0:
+            self._logger.info(f"Private subscription list: {result}.")
         channel = message_obj.get("e", None)
-        private_message_obj = message_obj.get("P", None)
         if channel is not None:
             if channel == constants.CHANNEL_USER_ORDER:
-                self.on_user_order_data(message=private_message_obj)
+                self.on_user_order_data(message=message_obj)
             elif channel == constants.CHANNEL_USER_TRADE:
-                self.on_user_trade_data(message=private_message_obj)
+                self.on_user_trade_data(message=message_obj)
 
     def on_private_close(self, ws: websocket.WebSocketApp, close_status_code: int, message: str) -> None:
         """
