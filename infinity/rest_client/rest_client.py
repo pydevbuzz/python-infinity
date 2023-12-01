@@ -2285,15 +2285,19 @@ class RestClient:
             {
                 "trxs": [
                     {
-                        "trxId": 85296286,
+                        "trxId": 146763412,
                         "marketId": 1,
                         "instrumentId": "ETH-SPOT",
-                        "side": "False",
-                        "rate": "0.0184",
-                        "quantity": "0.0008",
-                        "orderId": 105241905,
-                        "date": 1701055737000
-                    },...
+                        "order_type": 1, // limit or market
+                        "order_side": False, // borrow or lend
+                        "order_rate": "0.0334",
+                        "trade_rate": "0.0334",
+                        "order_quantity": "0.0001",
+                        "trade_quantity": "0.0001",
+                        "orderId": 276866883,
+                        "clientOrderId": "24eer32"
+                        "date": 1701229683449
+                    }
                 ]
             }
         """
@@ -2340,16 +2344,18 @@ class RestClient:
                         "trxId": 146763412,
                         "marketId": 12001,
                         "instrumentId": "ETH-2023-11-30",
-                        "side": "False",
-                        "rate": "0.0334",
-                        "quantity": "0.0001",
-                        "lendOrderId": 276866883,
+                        "order_type": 1, // limit or market
+                        "order_side": False, // borrow or lend
+                        "order_rate": "0.0334",
+                        "trade_rate": "0.0334",
+                        "order_quantity": "0.0001",
+                        "trade_quantity": "0.0001",
+                        "orderId": 276866883,
+                        "clientOrderId": "24eer32"
                         "date": 1701229683449
                     }
                 ]
             }
-
-
         """
         if account_id is None:
             account_id = self._account_id
