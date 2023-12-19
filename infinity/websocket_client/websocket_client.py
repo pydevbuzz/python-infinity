@@ -12,14 +12,13 @@ from infinity.websocket_client import constants
 
 
 class WebSocketClient:
-    def __init__(self, public_ws_url: str = None, private_ws_url: str = None, login: LoginClient = None,
+    def __init__(self, ws_url: str = None, login: LoginClient = None,
                  auto_reconnect_retries: int = 0, logger: logging.Logger = None):
         """
         Initializes the InfinityWebsocket object.
 
         Args:
-            public_ws_url (str): public Websocket
-            private_ws_url (str): private Websocket
+            ws_url (str): Websocket
             login (LoginClient): login to use private websocket
             auto_reconnect_retries (int): The number of times to attempt auto-reconnection in case of disconnection.
             logger (logging.Logger): The logger object to use for logging.
@@ -27,8 +26,7 @@ class WebSocketClient:
         # websocket.enableTrace(True)
         self.__ping_timeout = 30
         self.__ping_interval = 60
-        self._PUBLIC_WS_URL = public_ws_url
-        self._PRIVATE_WS_URL = private_ws_url
+        self._WS_URL = ws_url
         self._private_ws = None
         self._public_ws = None
         self._inf_login = login
@@ -221,7 +219,7 @@ class WebSocketClient:
             None
         """
         self._logger.debug(f"Connecting infinity public websocket client...")
-        new_public_ws = websocket.WebSocketApp(self._PUBLIC_WS_URL,
+        new_public_ws = websocket.WebSocketApp(self._WS_URL,
                                                on_open=self.on_public_open,
                                                on_message=self.on_public_message,
                                                on_close=self.on_public_close,
@@ -244,7 +242,7 @@ class WebSocketClient:
         """
         self._logger.debug(f"Connecting infinity private websocket client...")
         ws_header = "Authorization: Bearer " + self._access_token
-        new_private_ws = websocket.WebSocketApp(self._PRIVATE_WS_URL,
+        new_private_ws = websocket.WebSocketApp(self._WS_URL,
                                                 on_open=self.on_private_open,
                                                 on_message=self.on_private_message,
                                                 on_close=self.on_private_close,
@@ -806,16 +804,24 @@ class WebSocketClient:
 
         Example:
         {
-            "e": "recentTrades", (channel name)
-            "E": 1696584281624,
-            "s": "ETH-SPOT", (market)
-            "m": 1, (market id)
-            "P": {
-              "p": "0.0246", (rate)
-              "q": "0.3624", (quantity)
-              "d": 1696584281599, (trade time)
-              "s": true (side)
-            }
+            "e": "recentTrades",
+            "E": 1702970997315,
+            "s": "USDT-2023-12-29",
+            "m": 12148,
+            "P": [
+                {
+                    "p": "0.0518",
+                    "q": "1353.3",
+                    "d": 1702970997296,
+                    "s": "True"
+                },
+                {
+                    "p": "0.0514",
+                    "q": "4065.21",
+                    "d": 1702970997296,
+                    "s": "True"
+                }
+            ]
         }
         """
         try:
@@ -824,22 +830,23 @@ class WebSocketClient:
                 rates_type = constants.FLOATING
             else:
                 rates_type = constants.FIXED_RATE
-            trade_msg = message.get("P", None)
-            if trade_msg is not None:
-                rate = float(trade_msg.get("p", 0))
-                quantity = float(trade_msg.get("q", 0))
-                side = constants.BORROW if trade_msg.get("s", None) else constants.LEND
-                trade_time = datetime.utcfromtimestamp(trade_msg.get("d", None) / 1000)
-                public_trade = {
-                    constants.INSTRUMENT_ID: instrument_id,
-                    constants.RATES_TYPE: rates_type,
-                    constants.TRADE_TIME: trade_time,
-                    constants.RATE: rate,
-                    constants.QUANTITY: quantity,
-                    constants.SIDE: side
-                }
-                self._logger.debug(f"Public trade: {public_trade}.")
-                self.process_public_trade(public_trade=public_trade)
+            trades = message.get("P", None)
+            if trades is not None and len(trades) > 0:
+                for trade_msg in trades:
+                    rate = float(trade_msg.get("p", 0))
+                    quantity = float(trade_msg.get("q", 0))
+                    side = constants.BORROW if trade_msg.get("s", None) else constants.LEND
+                    trade_time = datetime.utcfromtimestamp(trade_msg.get("d", None) / 1000)
+                    public_trade = {
+                        constants.INSTRUMENT_ID: instrument_id,
+                        constants.RATES_TYPE: rates_type,
+                        constants.TRADE_TIME: trade_time,
+                        constants.RATE: rate,
+                        constants.QUANTITY: quantity,
+                        constants.SIDE: side
+                    }
+                    self._logger.debug(f"Public trade: {public_trade}.")
+                    self.process_public_trade(public_trade=public_trade)
         except Exception as e:
             self._logger.error(f"Exception thrown in on_public_trades raw={message}, {e=}. {traceback.format_exc()}")
 
