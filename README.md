@@ -47,8 +47,7 @@ For feedback or suggestions, please reach out via one of the contact methods spe
 
 | Release Version | Changelog                                    |
 |-----------------|----------------------------------------------|
-| `0.0.3`         | Stable release for testnet (**recommended**) |
-| `0.0.4a1`       | alpha version to prepare 0.0.4               |
+| `0.0.4`         | Stable release for testnet (**recommended**) |
 
 
 ## Documentation
@@ -166,15 +165,14 @@ from infinity.websocket_client import WebSocketClient as InfinityWebsocketClient
 # =============================================================================
 # For public WEBSOCKET channel
 # =============================================================================
-infinity_public_ws = InfinityWebsocketClient(public_ws_url="Infinity Exchange Public Websocket URL",
+infinity_public_ws = InfinityWebsocketClient(ws_url="Infinity Exchange Websocket URL",
                                       auto_reconnect_retries=3) # default is 0 which would disable reconnection retries
 infinity_public_ws.run_all()
 infinity_public_ws.disconnect_all() # disconnect all the websocket connection
 # =============================================================================
 # For private and public WEBSOCKET channel
 # =============================================================================
-infinity_ws = InfinityWebsocketClient(public_ws_url="Infinity Exchange Public Websocket URL",
-                                      private_ws_url="Infinity Exchange Private Websocket URL",
+infinity_ws = InfinityWebsocketClient(ws_url="Infinity Exchange Websocket URL",
                                       login=infinity_login,  # Infinity Exchange Login Client
                                       auto_reconnect_retries=3)
 infinity_ws.run_all()
