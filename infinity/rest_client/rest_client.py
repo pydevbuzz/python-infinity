@@ -1,4 +1,3 @@
-import json
 import logging
 import threading
 import time
@@ -108,7 +107,7 @@ class RestClient:
                     raise UnknownError(response=response,
                                        message=f"Unknown error [{str(response.status_code)}]" + error_message)
 
-            res = json.loads(response)
+            res = response.json()
             response_success = res.get("success", None)
 
             if response_success is not None:
