@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from typing import List
 from uuid import uuid4
 import requests
+from requests.exceptions import JSONDecodeError
 import infinity.rest_client.constants as constants
 from infinity.login.infinity_login import LoginClient
 from infinity.utils import RepeatTimer, generate_query_url, get_default_logger
@@ -123,10 +124,11 @@ class RestClient:
                 res = res["data"]
             response = self._parse_orders(response=res)
             return response
-        except ValueError:
-            raise ValueError
+        except (ValueError | JSONDecodeError) as e:
+            self._logger.error(f"Error occurs when handling REST response = {response.text}", e)
+            raise e
         except Exception as e:
-            self._logger.error("Unknown error when handling REST response", e)
+            self._logger.error(f"Unknown error occurs when handling REST response = {response.text}", e)
             raise e
 
 
