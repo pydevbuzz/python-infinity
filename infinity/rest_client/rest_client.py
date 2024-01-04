@@ -82,31 +82,31 @@ class RestClient:
                 response (in json format) otherwise.
 
         """
-        if not str(response.status_code).startswith("2"):
-            trace_msg = traceback.format_exc()
-            error_message = (" - request to Infinity Exchange failed, " +
-                             f"full response {response.json()}, traceback: {trace_msg}")
-            if str(response.status_code) == "400":
-                raise BadRequestError(response=response,
-                                      message="Bad request error [400]" + error_message)
-            elif str(response.status_code) == "401":
-                raise UnauthorizedError(response=response,
-                                        message="Unauthorized error [401]" + error_message)
-            elif str(response.status_code) == "403":
-                raise ForbiddenError(response=response,
-                                     message="Forbidden error [403]" + error_message)
-            elif str(response.status_code) == "500":
-                raise InternalServerError(response=response,
-                                          message="Internal server error [500]" + error_message)
-            elif str(response.status_code) == "503":
-                raise ServiceUnavailableError(response=response,
-                                              message="Service unavailable error [503]" + error_message)
-            else:
-                raise UnknownError(response=response,
-                                   message=f"Unknown error [{str(response.status_code)}]" + error_message)
         try:
-            res = response.json()
+            if not str(response.status_code).startswith("2"):
+                trace_msg = traceback.format_exc()
+                error_message = (" - request to Infinity Exchange failed, " +
+                                 f"full response {response.text}, traceback: {trace_msg}")
+                if str(response.status_code) == "400":
+                    raise BadRequestError(response=response,
+                                          message="Bad request error [400]" + error_message)
+                elif str(response.status_code) == "401":
+                    raise UnauthorizedError(response=response,
+                                            message="Unauthorized error [401]" + error_message)
+                elif str(response.status_code) == "403":
+                    raise ForbiddenError(response=response,
+                                         message="Forbidden error [403]" + error_message)
+                elif str(response.status_code) == "500":
+                    raise InternalServerError(response=response,
+                                              message="Internal server error [500]" + error_message)
+                elif str(response.status_code) == "503":
+                    raise ServiceUnavailableError(response=response,
+                                                  message="Service unavailable error [503]" + error_message)
+                else:
+                    raise UnknownError(response=response,
+                                       message=f"Unknown error [{str(response.status_code)}]" + error_message)
 
+            res = response.json()
             response_success = res.get("success", None)
 
             if response_success is not None:
@@ -125,6 +125,11 @@ class RestClient:
             return response
         except ValueError:
             raise ValueError
+        except Exception as e:
+            self._logger.error("Unknown error when handling REST response", e)
+            raise e
+
+
 
     @staticmethod
     def _replace_placeholder_with_value(url: str, placeholder_constant: str, value: str):

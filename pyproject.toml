@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-infinity"
-version = "0.0.4"
+version = "0.0.5a1"
 authors = [
   { name="pydevbuzz", email="pydevbuzz@gmail.com" },
 ]
