@@ -161,15 +161,17 @@ Create a WEBSOCKET client instance, parse the infinity_login instance from <code
 LoginClient class</code> for private channel usage.
 
 Please refer to the documentation for information on how to use other parameters.
+
 ```python
 from infinity.websocket_client import WebSocketClient as InfinityWebsocketClient
+
 # =============================================================================
 # For public WEBSOCKET channel
 # =============================================================================
 infinity_public_ws = InfinityWebsocketClient(ws_url="Infinity Exchange Websocket URL",
-                                      auto_reconnect_retries=3) # default is 0 which would disable reconnection retries
+                                             auto_reconnect_retries=3)  # default is 0 which would disable reconnection retries
 infinity_public_ws.run_all()
-infinity_public_ws.disconnect_all() # disconnect all the websocket connection
+infinity_public_ws.disconnect_all_ws_connection()  # disconnect all the websocket connection
 # =============================================================================
 # For private and public WEBSOCKET channel
 # =============================================================================
@@ -178,7 +180,7 @@ infinity_ws = InfinityWebsocketClient(ws_url="Infinity Exchange Websocket URL",
                                       auto_reconnect_retries=3)
 infinity_ws.run_all()
 
-infinity_ws.disconnect_all() # disconnect all the websocket connection
+infinity_ws.disconnect_all_ws_connection()  # disconnect all the websocket connection
 ```
 
 Usage example - channel subscription / unsubscription:

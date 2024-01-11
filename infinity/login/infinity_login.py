@@ -104,6 +104,12 @@ class LoginClient:
         This should be called when done interacting with Infinity Login to free up resources.
 
         """
+        self.__refresh_event.cancel()
+        self.__re_login_event.cancel()
+        if self.__refresh_lock.locked():
+            self.__refresh_lock.release()
+        if self.__re_login_lock.locked():
+            self.__re_login_lock.release()
         self._session.close()
         self._logger.info("HTTP session closed for Infinity Login.")
 
@@ -191,6 +197,7 @@ class LoginClient:
             self._logger.info(f"User logged in, time spent = {time_spent} seconds.")
         except Exception as e:
             self._logger.error(f"Cannot get user login info.", exc_info=e)
+            os._exit(1)
         # endregion
 
     def after_login(self) -> None:
@@ -306,7 +313,7 @@ class LoginClient:
         if self.is_re_logging_in():
             self._logger.info("re-logging in user, ignore access token refresh.")
         elif self.is_refreshing_token():
-            self._logger.info("access token is refreshing, ignore the second access token refresh request")
+            self._logger.info("access token is refreshing, ignore duplicate access token refresh request")
         elif self._access_token is None:
             self._logger.error(f"cannot find access token to refresh. Error: {traceback.format_exc()}")
         else:
