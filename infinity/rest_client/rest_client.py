@@ -58,16 +58,16 @@ class RestClient:
         if self._inf_login:
             if self._inf_login.is_login_success():
                 self._private_session = self._init_private_session()
-                self.__private_rest_lock = threading.Lock()
+                self.__private_rest_refresh_lock = threading.Lock()
                 self._response_cookies = self._inf_login.get_cookies()
-                refresh_interval = self._inf_login.get_refresh_interval()
+                refresh_interval = self._inf_login.get_refresh_interval() + 1  # 1s buffer
                 refresh_event = RepeatTimer(refresh_interval, self.refresh_rest_session)
                 refresh_event.start()
                 self._account_id = self.get_account_id()
             else:
                 self._logger.warning("cannot login, please check login details")
 
-    def _handle_response(self, response) -> dict | Exception:
+    def _handle_response(self, response: requests.Response) -> dict | Exception:
         """ Handle response from Infinity's REST APIs
 
         This handles the response from Infinity's REST APIs before returning to the user. If the response is successful,
@@ -125,13 +125,11 @@ class RestClient:
             response = self._parse_orders(response=res)
             return response
         except (ValueError, JSONDecodeError) as e:
-            self._logger.error(f"Error occurs when handling REST response = {response.text}", e)
+            self._logger.error(f"Error occurs when handling REST response = {response.text}", exc_info=e)
             raise e
         except Exception as e:
-            self._logger.error(f"Unknown error occurs when handling REST response = {response.text}", e)
+            self._logger.error(f"Unknown error occurs when handling REST response = {response.text}", exc_info=e)
             raise e
-
-
 
     @staticmethod
     def _replace_placeholder_with_value(url: str, placeholder_constant: str, value: str):
@@ -164,20 +162,19 @@ class RestClient:
         """
         # wait for refreshing/re-logging in process to finish
         while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
-            time.sleep(1)
+            time.sleep(0.001)
         new_token = self._inf_login.get_access_token()
         if self._access_token != new_token:
             self._logger.info("Refreshing private REST session...")
-            try:
-                self.__private_rest_lock.acquire()
-                self._access_token = new_token
-                self._private_session.headers = {"Content-Type": "application/json",
-                                                 "User-Agent": self._user_agent,
-                                                 "Authorization": "Bearer " + self._access_token}
-                self._response_cookies = self._inf_login.get_cookies()
-            finally:
-                self._logger.info("Private REST session is refreshed.")
-                self.__private_rest_lock.release()
+            with self.__private_rest_refresh_lock:
+                try:
+                    self._access_token = new_token
+                    self._private_session.headers = {"Content-Type": "application/json",
+                                                     "User-Agent": self._user_agent,
+                                                     "Authorization": "Bearer " + self._access_token}
+                    self._response_cookies = self._inf_login.get_cookies()
+                finally:
+                    self._logger.info("Private REST session is refreshed.")
 
     def login_success(self) -> bool:
         """Check if login was successful.

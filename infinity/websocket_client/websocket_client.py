@@ -5,14 +5,18 @@ import time
 import traceback
 from collections import deque
 from datetime import datetime
+from functools import partial
+
 import websocket
+
 from infinity.login.infinity_login import LoginClient
-from infinity.utils import RepeatTimer, create_thread_with_kwargs, get_default_logger
+from infinity.utils import RepeatTimer, create_thread_with_kwargs, get_default_logger, generate_uuid, \
+    get_current_utc_timestamp
 from infinity.websocket_client import constants
 
 
 class WebSocketClient:
-    def __init__(self, ws_url: str = None, login: LoginClient = None,
+    def __init__(self, ws_url: str = None, login: LoginClient = None, reconnect_interval: int = 86400,
                  auto_reconnect_retries: int = 0, logger: logging.Logger = None):
         """
         Initializes the InfinityWebsocket object.
@@ -24,29 +28,39 @@ class WebSocketClient:
             logger (logging.Logger): The logger object to use for logging.
         """
         # websocket.enableTrace(True)
+        self.__reconnect_interval = reconnect_interval
+        self.__ws_clients = {
+            "public": {
+                "ws_id": None,
+                "client": None,
+                "request_id": 1,
+                "reconnect_count": 0,
+                "subscribed_channels": [],
+                "reconnect_lock": threading.Lock(),
+                "is_open": False
+            }, "private": {
+                "ws_id": None,
+                "client": None,
+                "request_id": 1,
+                "reconnect_count": 0,
+                "subscribed_channels": [],
+                "reconnect_lock": threading.Lock(),
+                "is_open": False
+            }
+        }
+
         self.__ping_timeout = 30
         self.__ping_interval = 60
-        self._WS_URL = ws_url
-        self._private_ws = None
-        self._public_ws = None
+        self._ws_url = ws_url
+
         self._inf_login = login
         self._auto_reconnection_retries = auto_reconnect_retries
-        self._pub_request_id = 1
-        self._prv_request_id = 1
-        self._prv_reconnect_count = 0
-        self._pub_reconnect_count = 0
         self._subscribed_data_dict = {
             constants.CHANNEL_USER_TRADE: deque([]),
             constants.CHANNEL_ORDER_BOOK: deque([]),
             constants.CHANNEL_USER_ORDER: deque([]),
             constants.CHANNEL_RECENT_TRADES: deque([])
         }
-        self._public_subscribed_channels = set()
-        self._private_subscribed_channels = set()
-
-        self.__private_ws_lock = threading.Lock()
-        self._is_public_reconnecting = False
-        self._is_private_reconnecting = False
 
         if logger is None:
             self._logger = get_default_logger()
@@ -54,78 +68,8 @@ class WebSocketClient:
             self._logger = logger
 
         if self._inf_login:
-            if self._inf_login.is_login_success():
-                self._access_token = self._inf_login.get_access_token()
-                refresh_interval = self._inf_login.get_refresh_interval()
-                refresh_event = RepeatTimer(refresh_interval, self.refresh_private_ws)
-                refresh_event.start()
-            else:
+            if not self._inf_login.is_login_success():
                 self._logger.error("Cannot login, please check login details")
-
-    def refresh_private_ws(self) -> None:
-        """
-        Refresh the private WebSocket connection when JWT token is refreshed.
-
-        This function is used to refresh the private WebSocket connection by disconnecting from the current connection
-        and establishing a new connection.
-
-        Raises:
-            ConnectionError: If the connection to the server fails during the refresh process.
-        """
-        # wait for refreshing/re-logging in process to finish
-        while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
-            time.sleep(1)
-        new_token = self._inf_login.get_access_token()
-        if self._access_token != new_token:
-            self._logger.info("Refreshing private websocket session...")
-            try:
-                self.__private_ws_lock.acquire()
-                self._access_token = new_token
-                self._prv_reconnect_count = 0
-                new_private_thread = self.create_private_client()
-                new_private_thread.start()
-                while not self.is_private_connected():
-                    time.sleep(1)  # Adjust the delay as needed
-                self._logger.info("New private websocket session is established.")
-                self._logger.info("Re-subscribe to previous private channels.")
-                self.resubscribe_private_channels()
-            finally:
-                self._logger.info("Private websocket session is refreshed.")
-                self.__private_ws_lock.release()
-
-    def resubscribe_private_channels(self) -> None:
-        """
-        Re-subscribe to previously subscribed private channels after refreshing private websocket connection.
-
-        Iterates through the set of previously subscribed private channels and calls subscribe_private_channel
-        to re-subscribe to each channel.
-
-        Returns:
-            None
-        """
-        self._logger.info(f"Re-subscribe to private channels = {self._private_subscribed_channels}")
-        resubscribe = {
-            "method": "SUBSCRIBE",
-            "params": list(self._private_subscribed_channels)
-        }
-        self.send_private_message(message=resubscribe)
-
-    def resubscribe_public_channels(self) -> None:
-        """
-        Re-subscribe to previously subscribed public channels.
-
-        Iterates through the set of previously subscribed public channels and calls subscribe_public_channel
-        to re-subscribe to each channel.
-
-        Returns:
-            None
-        """
-        self._logger.info(f"Re-subscribe to public channels = {self._private_subscribed_channels}")
-        resubscribe = {
-            "method": "SUBSCRIBE",
-            "params": list(self._public_subscribed_channels)
-        }
-        self.send_public_message(message=resubscribe)
 
     def run_all(self) -> None:
         """
@@ -150,19 +94,26 @@ class WebSocketClient:
         websocket_client.run_all()
         """
         self._logger.info("Initializing Infinity Public Websocket...")
-        public_thread = self.create_public_client()
+        start_t = get_current_utc_timestamp()
+        public_thread = self.create_ws_thread(is_private=False)
         public_thread.start()
         if self._inf_login:
             self._logger.info("Initializing Infinity Private Websocket...")
-            private_thread = self.create_private_client()
+            private_thread = self.create_ws_thread(is_private=True)
             private_thread.start()
             while not (self.is_private_connected() and self.is_public_connected()):
-                time.sleep(1)  # Adjust the delay as needed
-            self._logger.info("Infinity Public and Private Websockets are connected.")
+                time.sleep(0.001)  # Adjust the delay as needed
+            public_ws_id = self.__ws_clients.get("public").get("ws_id", "None")
+            private_ws_id = self.__ws_clients.get("private").get("ws_id", "None")
+            log = ("Infinity Exchange public websocket(id=" + public_ws_id +
+                   ") and private Websocket(id=" + private_ws_id + ") are connected")
         else:
             while not self.is_public_connected():
-                time.sleep(1)  # Adjust the delay as needed
-            self._logger.info("Infinity Public Websocket is connected.")
+                time.sleep(0.001)  # Adjust the delay as needed
+            public_ws_id = self.__ws_clients.get("public").get("ws_id", "None")
+            log = f"Infinity Public Websocket(id={public_ws_id}) is connected"
+        time_spent = get_current_utc_timestamp() - start_t
+        self._logger.info(f"{log}, time spent = {time_spent} seconds.")
 
     def is_public_connected(self) -> bool:
         """
@@ -171,7 +122,7 @@ class WebSocketClient:
         Returns:
             bool: True if the connection is active, False otherwise.
         """
-        return self._public_ws and self._public_ws.sock and self._public_ws.sock.connected
+        return self.__ws_clients.get("public").get("is_open")
 
     def is_private_connected(self) -> bool:
         """
@@ -180,84 +131,77 @@ class WebSocketClient:
         Returns:
             bool: True if the connection is active, False otherwise.
         """
-        return self._private_ws and self._private_ws.sock and self._private_ws.sock.connected and (
-                self._access_token is not None)
+        return self.__ws_clients.get("private").get("is_open")
 
-    def create_public_client(self) -> threading.Thread:
-        """
-        Creates a thread that connects to the public Infinity server.
-
-        Returns:
-            threading.Thread: A thread of the public WebSocket session.
-        """
-        self.public_connect()
-        return create_thread_with_kwargs(func=self._public_ws.run_forever,
-                                         kwargs={"ping_timeout": self.__ping_timeout,
-                                                 "ping_interval": self.__ping_interval})
-
-    def create_private_client(self) -> threading.Thread:
+    def create_ws_thread(self, is_private: bool = False) -> threading.Thread:
         """
         Creates a thread that connects to the private Infinity server.
-        User need to login first to get access token before connecting private websocket.
+        User need to log in first to get access token before connecting private websocket.
 
         Returns:
             threading.Thread: A thread of the private WebSocket session.
         """
-        if self._inf_login.is_login_success():
-            self.private_connect()
-            return create_thread_with_kwargs(func=self._private_ws.run_forever,
+        if is_private and not self._inf_login.is_login_success():
+            self._logger.info("Please login before running private infinity client.")
+        else:
+            key = "private" if is_private else "public"
+            self.create_ws(is_private=is_private)
+            return create_thread_with_kwargs(func=self.__ws_clients.get(key).get("client").run_forever,
                                              kwargs={"ping_timeout": self.__ping_timeout,
                                                      "ping_interval": self.__ping_interval})
-        else:
-            self._logger.info("Please login before running private infinity client.")
 
-    def public_connect(self) -> None:
+    def create_ws(self, is_private: bool = False) -> None:
         """
         The public_connect function is used to connect the public websocket client.
 
         Returns:
             None
         """
-        self._logger.debug(f"Connecting infinity public websocket client...")
-        new_public_ws = websocket.WebSocketApp(self._WS_URL,
-                                               on_open=self.on_public_open,
-                                               on_message=self.on_public_message,
-                                               on_close=self.on_public_close,
-                                               on_error=self.on_public_error,
-                                               on_ping=self.on_public_ping,
-                                               on_pong=self.on_public_pong)
-        if self._public_ws is None:
-            self._public_ws = new_public_ws
-        else:
-            self._logger.info(f"Old public websocket connection will be closed.")
-            self._public_ws.close()
-            self._public_ws = new_public_ws
+        key = "private" if is_private else "public"
+        self._logger.debug(f"Connecting infinity {key} websocket client...")
+        new_ws_id = generate_uuid()
+        new_ws = websocket.WebSocketApp(self._ws_url)
+        # if is_private:
+        #     ws_header = "Authorization: Bearer " + self._inf_login.get_access_token()
+        #     new_ws.header = [ws_header]
+        new_ws.on_open = partial(self.on_open, ws_id=new_ws_id)
+        new_ws.on_message = partial(self.on_message, ws_id=new_ws_id)
+        new_ws.on_close = partial(self.on_close, ws_id=new_ws_id)
+        new_ws.on_error = partial(self.on_error, ws_id=new_ws_id)
+        new_ws.on_ping = partial(self.on_ping, ws_id=new_ws_id)
+        new_ws.on_pong = partial(self.on_pong, ws_id=new_ws_id)
 
-    def private_connect(self) -> None:
+        old_ws = self.__ws_clients.get(key).get("client", None)
+        if old_ws is not None:
+            old_ws_id = self.__ws_clients.get(key, {}).get("ws_id")
+            self._logger.info(f"Old/Expired {key} websocket connection (id={old_ws_id}) will be normally closed.")
+            self.__ws_clients[key]["client"].close()
+            if is_private:
+                while self.is_private_connected():
+                    time.sleep(0.001)  # Adjust the delay as needed
+            else:
+                while self.is_public_connected():
+                    time.sleep(0.001)  # Adjust the delay as needed
+        self.__ws_clients[key]["ws_id"] = new_ws_id
+        self.__ws_clients[key]["client"] = new_ws
+
+    def resubscribe_channels(self, is_private: bool = False) -> None:
         """
-        The private_connect function is used to connect the private websocket client.
+        Re-subscribe to previously subscribed channels after reconnecting private websocket connection.
 
         Returns:
             None
         """
-        self._logger.debug(f"Connecting infinity private websocket client...")
-        ws_header = "Authorization: Bearer " + self._access_token
-        new_private_ws = websocket.WebSocketApp(self._WS_URL,
-                                                on_open=self.on_private_open,
-                                                on_message=self.on_private_message,
-                                                on_close=self.on_private_close,
-                                                on_error=self.on_private_error,
-                                                header=[ws_header],
-                                                on_ping=self.on_private_ping,
-                                                on_pong=self.on_private_pong)
-        if self._private_ws is None:
-            self._private_ws = new_private_ws
-        else:
-            self._logger.info(f"Expired private websocket connection will be closed.")
-            self._private_ws.close()
-            self._private_ws = new_private_ws
+        key = "private" if is_private else "public"
+        subscribed_channels = self.__ws_clients.get(key).get("subscribed_channels")
+        self._logger.info(f"Re-subscribe to {key} channels = {subscribed_channels}")
+        resubscribe = {
+            "method": "SUBSCRIBE",
+            "params": subscribed_channels
+        }
+        self.send_message(message=resubscribe, is_private=is_private)
 
-    def re_connect_public(self) -> None:
+    def re_connect(self, is_private: bool = False) -> None:
         """
         The re_connect_public function is used to re-connect the Infinity public websocket client.
         It will attempt to reconnect for a number of times specified by the user when user initialize
@@ -267,48 +211,26 @@ class WebSocketClient:
         Returns:
             None
         """
-        if self._auto_reconnection_retries == 0:
-            self._logger.info("Auto-reconnection is disabled.")
-        elif self._pub_reconnect_count >= self._auto_reconnection_retries:
-            self._logger.warning("Cannot re-connect Infinity public websocket client.")
-        else:
-            self._logger.info(
-                f"Re-connecting Infinity public websocket client. Previous reconnects: {self._pub_reconnect_count}")
-            public_thread = self.create_public_client()
-            public_thread.start()
-            while not self.is_public_connected():
-                time.sleep(1)  # Adjust the delay as needed
-            self._is_public_reconnecting = False
-            self._pub_reconnect_count += 1
-            if self.is_public_connected():
-                self.resubscribe_public_channels()
-
-    def re_connect_private(self) -> None:
-        """
-        The re_connect_private function is used to re-connect the Infinity private websocket client.
-        It will attempt to reconnect for a number of times specified by the user when user initialize
-        InfinityWebsocket. (param: auto_reconnection_retries)
-        If it fails, it will log a warning message and stop trying.
-
-        Returns:
-            None
-        """
-        if self._auto_reconnection_retries == 0:
-            self._logger.info("Auto-reconnection is disabled.")
-        elif self._prv_reconnect_count >= self._auto_reconnection_retries:
-            self._logger.warning("Cannot re-connect Infinity private websocket client.")
-        else:
-            self._logger.info(
-                f"Re-connecting Infinity private websocket client. Previous reconnects: {self._prv_reconnect_count}")
-            self._access_token = self._inf_login.get_access_token()
-            private_thread = self.create_private_client()
-            private_thread.start()
-            while not self.is_private_connected():
-                time.sleep(1)  # Adjust the delay as needed
-            self._is_private_reconnecting = False
-            self._prv_reconnect_count += 1
-            if self.is_private_connected():
-                self.resubscribe_private_channels()
+        key = "private" if is_private else "public"
+        with self.__ws_clients.get(key).get("reconnect_lock"):
+            curr_reconnect_count = self.__ws_clients.get(key).get("reconnect_count")
+            if self._auto_reconnection_retries == 0:
+                self._logger.info("Auto-reconnection is disabled.")
+            elif curr_reconnect_count >= self._auto_reconnection_retries:
+                self._logger.warning("Cannot re-connect Infinity Exchange.")
+            else:
+                self._logger.info(
+                    f"Re-connecting Infinity {key} websocket. Previous reconnects: {curr_reconnect_count}")
+                thread = self.create_ws_thread(is_private=is_private)
+                thread.start()
+                if is_private:
+                    while not self.is_private_connected():
+                        time.sleep(0.001)  # Adjust the delay as needed
+                else:
+                    while not self.is_public_connected():
+                        time.sleep(0.001)  # Adjust the delay as needed
+                self.resubscribe_channels(is_private=is_private)
+                self.__ws_clients.get(key)["reconnect_count"] += 1
 
     def disconnect_all(self) -> None:
         """
@@ -318,13 +240,16 @@ class WebSocketClient:
         Returns:
             None
         """
-        self._logger.info(f"Disconnecting websocket client..")
-        if self._private_ws:
-            self._logger.info("Logout from infinity login client")
+        self._logger.debug(f"Disconnecting websocket client..")
+        if self.__ws_clients.get("private").get("client"):
+            curr_ws_id = self.__ws_clients.get("private").get("ws_id")
+            self._logger.info(f"Close private connection (id={curr_ws_id}) to infinity Exchange")
             self._inf_login.close_session()
-            self._private_ws.close()
-        if self._public_ws:
-            self._public_ws.close()
+            self.__ws_clients["private"]["client"].close()
+        if self.__ws_clients.get("public").get("client"):
+            curr_ws_id = self.__ws_clients.get("public").get("ws_id")
+            self._logger.info(f"Close public connection (id={curr_ws_id}) to infinity Exchange")
+            self.__ws_clients["public"]["client"].close()
 
     @staticmethod
     def create_subscription_message(channel_str: str) -> dict:
@@ -362,65 +287,35 @@ class WebSocketClient:
             ]
         }
 
-    def send_public_message(self, message: dict) -> None:
+    def send_message(self, message: dict, is_private: bool = False) -> None:
         """
         Sends a message using the public websocket.
 
         Args:
             message (str): The message to be sent.
+            is_private(bool): a flag to determine message send to which websocket. Default (False) to send to public ws.
 
         Returns:
             None
         """
-        method = message["method"]
-        if method == "SUBSCRIBE":
-            self._public_subscribed_channels.update(message.get("params", []))
-        elif method == "UNSUBSCRIBE":
-            self._public_subscribed_channels -= set(message.get("params", []))
-        message["id"] = self._pub_request_id
-        self._logger.debug(f"Sending websocket public message {message=}.")
-        if self._public_ws:
-            self._public_ws.send(json.dumps(message))
-            self._pub_request_id += 1
+        key = "private" if is_private else "public"
+        message["id"] = self.__ws_clients.get(key).get("request_id")
+        self._logger.debug(f"Sending websocket {key} message {message=}.")
+        if self.__ws_clients.get(key).get("client"):
+            self.__ws_clients[key]["client"].send(json.dumps(message))
+            self.__ws_clients.get(key)["request_id"] += 1
 
-    def send_private_message(self, message: dict) -> None:
+    def get_private_subscription(self, is_private: bool = False) -> None:
         """
-        Sends a message using the private websocket.
+        Get subscribed channels
 
         Args:
-            message (str): The message to be sent.
-
-        Returns:
-            None
-        """
-        method = message["method"]
-        if method == "SUBSCRIBE":
-            self._private_subscribed_channels.update(message.get("params", []))
-        elif method == "UNSUBSCRIBE":
-            self._private_subscribed_channels -= set(message.get("params", []))
-        message["id"] = self._prv_request_id
-        self._logger.debug(f"Sending websocket private message {message=}.")
-        if self._private_ws:
-            self._private_ws.send(json.dumps(message))
-            self._prv_request_id += 1
-
-    def get_public_subscription(self) -> None:
-        """
-        Get public subscribed channels
+            is_private(bool): a flag to determine message send to which websocket. Default (False) to send to public ws.
         """
         message = {
             "method": "LIST_SUBSCRIPTIONS"
         }
-        self.send_public_message(message=message)
-
-    def get_private_subscription(self) -> None:
-        """
-        Get private subscribed channels
-        """
-        message = {
-            "method": "LIST_SUBSCRIPTIONS"
-        }
-        self.send_private_message(message=message)
+        self.send_message(message=message, is_private=is_private)
 
     def get_received_data(self, channel: str) -> dict:
         """
@@ -436,6 +331,20 @@ class WebSocketClient:
             message = self._subscribed_data_dict[channel].popleft()
             return message
 
+    def private_ws_login(self) -> None:
+        """
+        Send ws login to private websocket session
+        """
+        login_message = {
+            "method": "LOGIN",
+            "params": {
+                "accessToken": self._inf_login.get_access_token()
+            }
+        }
+        self._logger.debug(f"Private websocket login {login_message=}.")
+        # do on private session
+        self.send_message(message=login_message, is_private=True)
+
     def subscribe_orderbook(self, instrument_id: str) -> None:
         """
         Subscribes to the order book channel for a given instrument id.
@@ -448,8 +357,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_ORDER_BOOK)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing orderbook for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_public_message(message=message)
+        self._logger.debug(f"Subscribing orderbook for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=False)
 
     def unsubscribe_orderbook(self, instrument_id: str) -> None:
         """
@@ -463,8 +372,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_ORDER_BOOK)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing orderbook for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_public_message(message=message)
+        self._logger.debug(f"Unsubscribing orderbook for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=False)
 
     def subscribe_public_trades(self, instrument_id: str) -> None:
         """
@@ -478,8 +387,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_RECENT_TRADES)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing public trades channel for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_public_message(message=message)
+        self._logger.debug(f"Subscribing public trades channel for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=False)
 
     def unsubscribe_public_trades(self, instrument_id: str) -> None:
         """
@@ -493,8 +402,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_RECENT_TRADES)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing public trades channel for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_public_message(message=message)
+        self._logger.debug(f"Unsubscribing public trades channel for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=False)
 
     def subscribe_user_trade(self, instrument_id: str) -> None:
         """
@@ -509,8 +418,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_TRADE)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing user trade channel for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_private_message(message=message)
+        self._logger.debug(f"Subscribing user trade channel for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=True)
 
     def unsubscribe_user_trade(self, instrument_id: str) -> None:
         """
@@ -525,8 +434,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_TRADE)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing user trade channel for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_private_message(message=message)
+        self._logger.debug(f"Unsubscribing user trade channel for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=True)
 
     def subscribe_user_order(self, instrument_id: str) -> None:
         """
@@ -541,8 +450,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_ORDER)
         message = self.create_subscription_message(channel_str=channel_str)
-        self._logger.info(f"Subscribing user order channel for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_private_message(message=message)
+        self._logger.debug(f"Subscribing user order channel for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=True)
 
     def unsubscribe_user_order(self, instrument_id: str) -> None:
         """
@@ -557,8 +466,8 @@ class WebSocketClient:
         """
         channel_str = self.generate_param_str(instrument_id=instrument_id, channel=constants.CHANNEL_USER_ORDER)
         message = self.create_unsubscription_message(channel_str=channel_str)
-        self._logger.info(f"Unsubscribing user order channel for {instrument_id=}, {channel_str=}, {message=}.")
-        self.send_private_message(message=message)
+        self._logger.debug(f"Unsubscribing user order channel for {instrument_id=}, {channel_str=}, {message=}.")
+        self.send_message(message=message, is_private=True)
 
     @staticmethod
     def generate_param_str(instrument_id: str, channel: str) -> str:
@@ -610,12 +519,14 @@ class WebSocketClient:
         """
         try:
             instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
-            update_time = datetime.utcfromtimestamp(message.get("E", None) / 1000)
+            update_time = None
+            if message.get("E", None) is not None:
+                update_time = datetime.utcfromtimestamp(message.get("E") / 1000)
 
-            price_dict = message.get("P", None)
+            price_dict = message.get("P", {})
 
-            asks_list = price_dict.get("a", None)
-            bids_list = price_dict.get("b", None)
+            asks_list = price_dict.get("a", [])
+            bids_list = price_dict.get("b", [])
 
             asks_book = {float(price_obj.get("p", 0)): float(price_obj.get("q", 0)) for price_obj in asks_list}
             asks_book = {k: asks_book[k] for k in sorted(asks_book, reverse=True)}
@@ -672,7 +583,7 @@ class WebSocketClient:
         try:
             symbol = message.get("s", None)
             # private message object
-            message = message.get("P", None)
+            message = message.get("P", {})
             instrument_id = message.get("I", None) if message.get("I", None) is not None else symbol
             trade_id = message.get("t", None)
             order_id = message.get("o", None)
@@ -680,7 +591,9 @@ class WebSocketClient:
             rate = float(message.get("p", 0))
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
-            trade_time = datetime.utcfromtimestamp(message.get("d", None) / 1000)
+            trade_time = None
+            if message.get("d", None) is not None:
+                trade_time = datetime.utcfromtimestamp(message.get("d") / 1000)
             user_trade = {
                 constants.INSTRUMENT_ID: instrument_id,
                 constants.TRADE_ID: trade_id,
@@ -744,18 +657,26 @@ class WebSocketClient:
         try:
             symbol = message.get("s", None)
             # private message object
-            message = message.get("P", None)
+            message = message.get("P", {})
             order_id = message.get("o", None)
             client_order_id = message.get("i", None)
-            order_type = constants.LIMIT_ORDER if int(message.get("O", None)) == 2 else constants.MARKET_ORDER
+            order_type = None
+            if message.get("O", None) is not None:
+                order_type = constants.LIMIT_ORDER if int(message.get("O")) == 2 else constants.MARKET_ORDER
             account_id = message.get("w", None)
             instrument_id = message.get("I", None) if message.get("I", None) is not None else symbol
-            market_type = constants.FLOATING if int(message.get("M", None)) == 1 else constants.FIXED_RATE
+            market_type = None
+            if message.get("M", None) is not None:
+                market_type = constants.FLOATING if int(message.get("M")) == 1 else constants.FIXED_RATE
             quantity = float(message.get("q", 0))
             side = constants.BORROW if message.get("s", None) else constants.LEND
             acc_fill_size = float(message.get("a", 0))
-            create_date = datetime.utcfromtimestamp(message.get("d", None) / 1000)
-            order_status = int(message.get("S", None))
+            create_date = None
+            if message.get("d", None) is not None:
+                create_date = datetime.utcfromtimestamp(message.get("d") / 1000)
+            order_status = None
+            if message.get("S", None) is not None:
+                order_status = int(message.get("S"))
             rate = float(message.get("p", 0))
 
             user_order = {
@@ -772,9 +693,8 @@ class WebSocketClient:
                 constants.CREATE_TIME: create_date,
                 constants.ORDER_STATUS: constants.ORDER_STATUS_TYPE[order_status]
             }
-            update_t = message.get("u", None)
-            if update_t is not None:
-                update_date = datetime.utcfromtimestamp(update_t / 1000)
+            if message.get("u", None) is not None:
+                update_date = datetime.utcfromtimestamp(message.get("u") / 1000)
                 user_order[constants.UPDATE_TIME] = update_date
             self._logger.debug(f"User order: {user_order=}.")
             self.process_user_order(user_order=user_order)
@@ -825,12 +745,13 @@ class WebSocketClient:
         }
         """
         try:
-            instrument_id = message.get("I", None) if message.get("I", None) is not None else message.get("s", None)
-            if instrument_id.split("-")[1] == "SPOT":
+            instrument_id = message.get("I") if message.get("I", None) is not None else message.get("s", "")
+            splits = instrument_id.split("-")
+            if len(splits) == 2 and splits[1] == "SPOT":
                 rates_type = constants.FLOATING
             else:
                 rates_type = constants.FIXED_RATE
-            trades = message.get("P", None)
+            trades = message.get("P", [])
             if trades is not None and len(trades) > 0:
                 for trade_msg in trades:
                     rate = float(trade_msg.get("p", 0))
@@ -862,198 +783,154 @@ class WebSocketClient:
         """
         self._subscribed_data_dict[constants.CHANNEL_RECENT_TRADES].append(public_trade)
 
-    def on_public_open(self, ws: websocket.WebSocketApp) -> None:
+    def on_open(self, ws: websocket.WebSocketApp, ws_id: str) -> None:
         """
-        Handle the event when the public websocket connection is opened.
+        Handle the event when the websocket connection is opened.
 
         Args:
-            ws (websocket.WebSocketApp): public websocket app
+            ws (websocket.WebSocketApp): websocket app.
+            ws_id (str): websocket unique ID.
 
         Returns:
             None
         """
-        self._logger.debug(f"Public WebSocket connection opened")
+        is_private = self.is_ws_private(ws_id=ws_id)
+        key = "private" if is_private else "public"
+        self._logger.debug(f"{key} websocket connection(id={ws_id}) opened")
+        if is_private:
+            self.private_ws_login()
+        else:
+            self.__ws_clients["public"]["is_open"] = True  # mark public websocket is ready
 
-    def on_private_open(self, ws: websocket.WebSocketApp) -> None:
+    def on_message(self, ws: websocket.WebSocketApp, message: str, ws_id: str) -> None:
         """
-        Handle the event when the private websocket connection is opened.
+        Handle the event when a message is received on the websocket.
 
         Args:
-            ws (websocket.WebSocketApp): private websocket app
-
-        Returns:
-            None
-        """
-        self._logger.debug(f"Private WebSocket connection opened")
-
-    def on_public_message(self, ws: websocket.WebSocketApp, message: str) -> None:
-        """
-        Handle the event when a message is received on the public websocket.
-
-        Args:
-            ws (websocket.WebSocketApp): public websocket app
+            ws (websocket.WebSocketApp): websocket app
             message (str): The message received from the websocket.
+            ws_id (str): websocket unique ID.
 
         Returns:
             None
         """
-        self._logger.debug(f"Received public message: {message=}.")
+        is_private = self.is_ws_private(ws_id=ws_id)
+        key = "private" if is_private else "public"
+        self._logger.debug(f"Received {key} message on ws(id={ws_id}): {message=}.")
         message_obj = json.loads(message)
-        result = message_obj.get("data", {}).get("result", None)
-        if result is not None and isinstance(result, list) and len(result) > 0:
-            self._logger.info(f"Public subscription list: {result}.")
+        data = message_obj.get("data", {})
+        # get private subscriptions
+        subscriptions = data.get("subscriptions", None)
+        if subscriptions is not None and isinstance(subscriptions, list) and len(subscriptions) > 0:
+            self._logger.debug(f"[{ws_id=}] {key} subscription list: {subscriptions}.")
+            self.__ws_clients.get(key)["subscribed_channels"] = subscriptions
+        # get private websocket login
+        if (is_private
+                and str(data.get("user", {}).get("address")).casefold() == self._inf_login.account_address.casefold()):
+            self.__ws_clients["private"]["is_open"] = True  # mark private websocket is ready
+            self._logger.info(f"[{ws_id=}] {key} websocket logged in.")
+
         channel = message_obj.get("e", None)
         if channel is not None:
             if channel == constants.CHANNEL_RECENT_TRADES:
                 self.on_public_trade(message=message_obj)
             elif channel == constants.CHANNEL_ORDER_BOOK:
                 self.on_orderbook_data(message=message_obj)
-
-    def on_private_message(self, ws: websocket.WebSocketApp, message: str) -> None:
-        """
-        Handle the event when a message is received on the private websocket.
-
-        Args:
-            ws (websocket.WebSocketApp): private websocket app
-            message (str): The message received from the websocket.
-
-        Returns:
-            None
-        """
-        self._logger.debug(f"Received private message: {message=}.")
-        message_obj = json.loads(message)
-        result = message_obj.get("data", {}).get("result", None)
-        if result is not None and isinstance(result, list) and len(result) > 0:
-            self._logger.info(f"Private subscription list: {result}.")
-        channel = message_obj.get("e", None)
-        if channel is not None:
-            if channel == constants.CHANNEL_USER_ORDER:
+            elif channel == constants.CHANNEL_USER_ORDER:
                 self.on_user_order_data(message=message_obj)
             elif channel == constants.CHANNEL_USER_TRADE:
                 self.on_user_trade_data(message=message_obj)
 
-    def on_private_close(self, ws: websocket.WebSocketApp, close_status_code: int, message: str) -> None:
+    def on_close(self, ws: websocket.WebSocketApp, close_status_code: int, message: str, ws_id: str) -> None:
         """
-        Callback function called when a private WebSocket connection is closed.
-        If close status code is not normal and private reconnection is not already in progress, trigger reconnection.
+        Callback function called when a websocket connection is closed.
+        If close status code is not normal and reconnection is not already in progress, trigger reconnection.
 
         Args:
-            ws (websocket.WebSocketApp): private websocket app
+            ws (websocket.WebSocketApp): websocket app
             close_status_code (int): The status code indicating the reason for the closure.
+                                    close_status_code 4000 = expires the websocket connection
             message (str): A human-readable string explaining the reason for the closure.
+            ws_id (str): websocket unique ID.
 
         Returns:
             None
         """
-        if (close_status_code is not None and close_status_code != websocket.STATUS_NORMAL and
-                not self._is_private_reconnecting):
-            self._is_private_reconnecting = True
-            self._logger.warning(f"Private WebSocket connection closed [{close_status_code=}]. {message=}.")
-            self.re_connect_private()
+        is_private = self.is_ws_private(ws_id=ws_id)
+        key = "private" if is_private else "public"
+        if (close_status_code is not None and close_status_code != websocket.STATUS_NORMAL
+                and not self.__ws_clients.get(key).get("reconnect_lock").locked()):
+            self._logger.warning(f"{key} websocket connection(id={ws_id}) closed [{close_status_code=}]. {message=}.")
+            self.re_connect(is_private=is_private)
         else:
-            self._logger.info(f"Private WebSocket connection normally closed. {message=}.")
+            self._logger.info(f"{key} websocket connection(id={ws_id}) normally closed. {message=}.")
+        self.__ws_clients.get(key)["is_open"] = False
 
-    def on_public_close(self, ws: websocket.WebSocketApp, close_status_code: int, message: str) -> None:
+    def on_error(self, ws: websocket.WebSocketApp, error, ws_id: str) -> None:
         """
-        Callback function called when a public WebSocket connection is closed.
-        If close status code is not normal and public reconnection is not already in progress, trigger reconnection.
+        Callback function called when an error occurs in a websocket connection.
 
         Args:
-            ws (websocket.WebSocketApp): public websocket app
-            close_status_code (int): The status code indicating the reason for the closure.
-            message (str): A human-readable string explaining the reason for the closure.
+            ws (websocket.WebSocketApp): websocket app
+            error (Exception): The exception object representing the error.
+            ws_id (str): websocket unique ID.
 
         Returns:
             None
         """
-        if (close_status_code is not None and close_status_code != websocket.STATUS_NORMAL and
-                not self._is_public_reconnecting):
-            self._is_public_reconnecting = True
-            self._logger.warning(f"Public WebSocket connection closed [{close_status_code=}]. {message=}.")
-            self.re_connect_public()
+        is_private = self.is_ws_private(ws_id=ws_id)
+        key = "private" if is_private else "public"
+        if (not self.__ws_clients.get(key).get("reconnect_lock").locked()
+                and isinstance(error, websocket.WebSocketConnectionClosedException)):
+            self._logger.warning(f"{key} websocket(id={ws_id}) connection error: {error=}.")
+            self.re_connect(is_private=is_private)
+
+    def on_ping(self, ws: websocket.WebSocketApp, message: str, ws_id: str) -> None:
+        """
+        Callback function called when a ping message is received.
+
+        Args:
+            ws (websocket.WebSocketApp): websocket app
+            message (str): The ping message received from the server.
+            ws_id (str): websocket unique ID.
+
+        Returns:
+            None
+        """
+        is_private = self.is_ws_private(ws_id=ws_id)
+        key = "private" if is_private else "public"
+        self._logger.debug(f"{key} websocket(id={ws_id}) got ping, reply sent.")
+
+    def on_pong(self, ws: websocket.WebSocketApp, message: str, ws_id: str) -> None:
+        """
+        Callback function called when a pong message is received.
+
+        Args:
+            ws (websocket.WebSocketApp): websocket app
+            message (str): The pong message received from the server.
+            ws_id (str): websocket unique ID.
+
+        Returns:
+            None
+        """
+        is_private = self.is_ws_private(ws_id=ws_id)
+        key = "private" if is_private else "public"
+        self._logger.debug(f"{is_private} websocket(id={ws_id}) got pong, no need to reply.")
+
+    def is_ws_private(self, ws_id: str) -> bool:
+        """
+        Check websocket unique ID and determine whether is private websocket
+
+        Args:
+            ws_id (str): websocket unique ID.
+
+        Returns:
+            bool
+        """
+        if self.__ws_clients.get("private").get("ws_id") == ws_id:
+            return True
+        elif self.__ws_clients.get("public").get("ws_id") == ws_id:
+            return False
         else:
-            self._logger.info(f"Public WebSocket connection normally closed. {message=}.")
-
-    def on_private_error(self, ws: websocket.WebSocketApp, error) -> None:
-        """
-        Callback function called when an error occurs in a private WebSocket connection.
-
-        Args:
-            ws (websocket.WebSocketApp): private websocket app
-            error (Exception): The exception object representing the error.
-
-        Returns:
-            None
-        """
-        if not self._is_private_reconnecting and isinstance(error, websocket.WebSocketConnectionClosedException):
-            self._is_private_reconnecting = True
-            self._logger.warning(f"Private Websocket Error: {error=}.")
-            self.re_connect_private()
-
-    def on_public_error(self, ws: websocket.WebSocketApp, error) -> None:
-        """
-        Callback function called when an error occurs in a private WebSocket connection.
-
-        Args:
-            ws (websocket.WebSocketApp): public websocket app
-            error (Exception): The exception object representing the error.
-
-        Returns:
-            None
-        """
-        if not self._is_public_reconnecting and isinstance(error, websocket.WebSocketConnectionClosedException):
-            self._is_public_reconnecting = True
-            self._logger.warning(f"Public Websocket Error: {error=}.")
-            self.re_connect_public()
-
-    def on_public_ping(self, ws: websocket.WebSocketApp, message: str) -> None:
-        """
-        Callback function called when a public ping message is received.
-
-        Args:
-            ws (websocket.WebSocketApp): public websocket app
-            message (str): The ping message received from the server.
-
-        Returns:
-            None
-        """
-        self._logger.debug("Public Websocket got ping, reply sent.")
-
-    def on_public_pong(self, ws: websocket.WebSocketApp, message: str) -> None:
-        """
-        Callback function called when a public pong message is received.
-
-        Args:
-            ws (websocket.WebSocketApp): public websocket app
-            message (str): The pong message received from the server.
-
-        Returns:
-            None
-        """
-        self._logger.debug("Public Websocket got pong, no need to reply.")
-
-    def on_private_ping(self, ws: websocket.WebSocketApp, message: str) -> None:
-        """
-        Callback function called when a private ping message is received.
-
-        Args:
-            ws (websocket.WebSocketApp): private websocket app
-            message (str): The ping message received from the server.
-
-        Returns:
-            None
-        """
-        self._logger.debug("Private Websocket got ping, reply sent.")
-
-    def on_private_pong(self, ws: websocket.WebSocketApp, message: str) -> None:
-        """
-        Callback function called when a private pong message is received.
-
-        Args:
-            ws (websocket.WebSocketApp): private websocket app
-            message (str): The pong message received from the server.
-
-        Returns:
-            None
-        """
-        self._logger.debug("Private Websocket got pong, no need to reply.")
+            self._logger.error("cannot identity WS ID => " + ws_id)
+            return False

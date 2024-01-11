@@ -4,11 +4,12 @@ import threading
 import traceback
 import requests
 from eth_account.messages import encode_structured_data
+from requests import JSONDecodeError
 from requests.cookies import RequestsCookieJar
 from web3.auto import w3
 from infinity.login import constants
 from infinity.login.client_exceptions import *
-from infinity.utils import RepeatTimer, get_default_logger
+from infinity.utils import RepeatTimer, get_default_logger, get_current_utc_timestamp
 
 
 class LoginClient:
@@ -50,10 +51,13 @@ class LoginClient:
         self._session = None
         self._access_token = None
         self._response_cookies = None
+        self._last_refresh_timestamp = None
         self._refresh_interval = refresh_interval
         self._re_login_interval = re_login_interval
         self.__re_login_lock = threading.Lock()
         self.__refresh_lock = threading.Lock()
+        self.__refresh_event = None
+        self.__re_login_event = None
 
         if logger is None:
             self._logger = get_default_logger()
@@ -65,11 +69,7 @@ class LoginClient:
         # public session for login
         self._session = self.init_session()
         self.do_login()
-        if self._login_success:
-            self.__refresh_event = RepeatTimer(self._refresh_interval, self.refresh_access_token)
-            self.__refresh_event.start()
-            self.__re_login_event = RepeatTimer(self._re_login_interval, self.re_login)
-            self.__re_login_event.start()
+        self.after_login()
 
     def init_session(self) -> requests.Session:
         """Initialize an Infinity Login HTTP session.
@@ -117,7 +117,7 @@ class LoginClient:
         return self._login_success
 
     @property
-    def account_address(self):
+    def account_address(self) -> str:
         """ Return the user's account address.
 
         This returns the user's public blockchain address that is currently connected to the Infinity exchange.
@@ -142,6 +142,7 @@ class LoginClient:
             LoginError: If login failed.
 
         """
+        start_t = get_current_utc_timestamp()
         if self.__private_key is None:
             self._logger.error("please provide private key. exit.")
             os._exit(1)
@@ -180,15 +181,25 @@ class LoginClient:
             if self._access_token is None:
                 self._logger.error("Fail to get access token when login")
                 raise Exception
+            self._last_refresh_timestamp = get_current_utc_timestamp()
             self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
                                      "User-Agent": self.__user_agent,
                                      "Authorization": "Bearer " + self._access_token}
             self._response_cookies = response.cookies
-            self._logger.info("User logged in")
             self._login_success = True
+            time_spent = get_current_utc_timestamp() - start_t
+            self._logger.info(f"User logged in, time spent = {time_spent} seconds.")
         except Exception as e:
-            self._logger.error(f"Cannot get user login info. Error: {e}")
+            self._logger.error(f"Cannot get user login info.", exc_info=e)
         # endregion
+
+    def after_login(self) -> None:
+        if self._login_success:
+            self.__refresh_event = RepeatTimer(self._refresh_interval, self.refresh_access_token)
+            self.__refresh_event.start()
+            if self.__re_login_event is None:
+                self.__re_login_event = RepeatTimer(self._re_login_interval, self.re_login)
+                self.__re_login_event.start()
 
     def is_refreshing_token(self):
         """Check if access token refresh is in progress.
@@ -223,15 +234,19 @@ class LoginClient:
 
         """
         self._logger.info("re-logging in...")
-        try:
-            self.__re_login_lock.acquire()
-            self.__refresh_event.cancel()
-            self._login_success = False
-            self.do_login()
-            self.__refresh_event = RepeatTimer(self._refresh_interval, self.refresh_access_token)
-            self.__refresh_event.start()
-        finally:
-            self.__re_login_lock.release()
+        with self.__re_login_lock:
+            start_t = get_current_utc_timestamp()
+            try:
+                self.__refresh_event.cancel()
+                self.__refresh_lock.release()
+                self._login_success = False
+                self.do_login()
+                self.after_login()
+            except Exception as e:
+                self._logger.error("cannot re-login", exc_info=e)
+            finally:
+                time_spent = get_current_utc_timestamp() - start_t
+                self._logger.debug(f"re-logged in, time spent = {time_spent} seconds")
 
     def get_cookies(self) -> RequestsCookieJar | None:
         """Get cookies from successful login response.
@@ -250,6 +265,14 @@ class LoginClient:
 
         """
         return self._access_token
+
+    def get_last_refresh_timestamp(self) -> float:
+        """Get last access token refresh utc timestamp. Login/re-login will update the timestamp as well.
+
+        Returns:
+            float: last access token refresh utc timestamp
+        """
+        return self._last_refresh_timestamp
 
     def get_refresh_interval(self) -> int:
         """Get the refresh interval for the access token.
@@ -282,32 +305,34 @@ class LoginClient:
         """
         if self.is_re_logging_in():
             self._logger.info("re-logging in user, ignore access token refresh.")
+        elif self.is_refreshing_token():
+            self._logger.info("access token is refreshing, ignore the second access token refresh request")
         elif self._access_token is None:
             self._logger.error(f"cannot find access token to refresh. Error: {traceback.format_exc()}")
         else:
-            try:
-                self.__refresh_lock.acquire()
-                body = {constants.REFRESH_TOKEN: self._access_token}
-                response = self._session.post(url=self._API_BASE_URL + constants.REFRESH_ENDPOINT, data=body,
-                                              cookies=self._response_cookies)
-                refresh_info = self._handle_response(response=response)
-                self._access_token = refresh_info.get("accessToken", {}).get("token", None)
-                if self._access_token is None:
-                    self._logger.error("Fail to get refreshed access token")
-                    raise Exception
-                self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
-                                         "User-Agent": self.__user_agent,
-                                         "Authorization": "Bearer " + self._access_token}
-                self._response_cookies = response.cookies
-                self._logger.info("refreshed JWT token")
-                self._login_success = True
-            except Exception as e:
-                self._logger.error(f"cannot refresh access token, Exception: {e}")
-            finally:
-                self.__refresh_lock.release()
+            with self.__refresh_lock:
+                start_t = get_current_utc_timestamp()
+                try:
+                    body = {constants.REFRESH_TOKEN: self._access_token}
+                    response = self._session.post(url=self._API_BASE_URL + constants.REFRESH_ENDPOINT, data=body,
+                                                  cookies=self._response_cookies)
+                    refresh_info = self._handle_response(response=response)
+                    self._access_token = refresh_info.get("accessToken", {}).get("token", None)
+                    if self._access_token is None:
+                        self._logger.error("Fail to get refreshed access token")
+                        raise Exception
+                    self._last_refresh_timestamp = get_current_utc_timestamp()
+                    self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
+                                             "User-Agent": self.__user_agent,
+                                             "Authorization": "Bearer " + self._access_token}
+                    self._response_cookies = response.cookies
+                    time_spent = get_current_utc_timestamp() - start_t
+                    self._logger.info(f"refreshed JWT token, time spent = {time_spent} seconds.")
+                    self._login_success = True
+                except Exception as e:
+                    self._logger.error("cannot refresh access token in Infinity Login", exc_info=e)
 
-    @staticmethod
-    def _handle_response(response: requests.Response) -> dict | Exception:
+    def _handle_response(self, response: requests.Response) -> dict | Exception:
         """ Handle response from Infinity's REST APIs
 
         This handles the response from Infinity's REST APIs before returning to the user. If the response is successful,
@@ -320,34 +345,34 @@ class LoginClient:
 
         Returns:
             response: The data portion (in json format) of the Infinity REST API response if available; the entire
-            response (in json format) otherwise.
+                response (in json format) otherwise.
 
         """
-        if not str(response.status_code).startswith("2"):
-            trace_msg = traceback.format_exc()
-            error_message = (" - request to Infinity Exchange failed, " +
-                             f"full response {response.json()}, traceback: {trace_msg}")
-            if str(response.status_code) == "400":
-                raise BadRequestError(response=response,
-                                      message="Bad request error [400]" + error_message)
-            elif str(response.status_code) == "401":
-                raise UnauthorizedError(response=response,
-                                        message="Unauthorized error [401]" + error_message)
-            elif str(response.status_code) == "403":
-                raise ForbiddenError(response=response,
-                                     message="Forbidden error [403]" + error_message)
-            elif str(response.status_code) == "500":
-                raise InternalServerError(response=response,
-                                          message="Internal server error [500]" + error_message)
-            elif str(response.status_code) == "503":
-                raise ServiceUnavailableError(response=response,
-                                              message="Service unavailable error [503]" + error_message)
-            else:
-                raise UnknownError(response=response,
-                                   message=f"Unknown error [{str(response.status_code)}]" + error_message)
         try:
-            res = response.json()
+            if not str(response.status_code).startswith("2"):
+                trace_msg = traceback.format_exc()
+                error_message = (" - request to Infinity Exchange failed, " +
+                                 f"full response {response.text}, traceback: {trace_msg}")
+                if str(response.status_code) == "400":
+                    raise BadRequestError(response=response,
+                                          message="Bad request error [400]" + error_message)
+                elif str(response.status_code) == "401":
+                    raise UnauthorizedError(response=response,
+                                            message="Unauthorized error [401]" + error_message)
+                elif str(response.status_code) == "403":
+                    raise ForbiddenError(response=response,
+                                         message="Forbidden error [403]" + error_message)
+                elif str(response.status_code) == "500":
+                    raise InternalServerError(response=response,
+                                              message="Internal server error [500]" + error_message)
+                elif str(response.status_code) == "503":
+                    raise ServiceUnavailableError(response=response,
+                                                  message="Service unavailable error [503]" + error_message)
+                else:
+                    raise UnknownError(response=response,
+                                       message=f"Unknown error [{str(response.status_code)}]" + error_message)
 
+            res = response.json()
             response_success = res.get("success", None)
 
             if response_success is not None:
@@ -363,5 +388,9 @@ class LoginClient:
             if "data" in res:
                 res = res["data"]
             return res
-        except ValueError:
-            raise ValueError
+        except (ValueError, JSONDecodeError) as e:
+            self._logger.error(f"Error occurs when handling login response = {response.text}", exc_info=e)
+            raise e
+        except Exception as e:
+            self._logger.error(f"Unknown error occurs when handling login response = {response.text}", exc_info=e)
+            raise e
