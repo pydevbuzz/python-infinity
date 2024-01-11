@@ -125,7 +125,7 @@ class RestClient:
                 res = res["data"]
             response = self._parse_orders(response=res)
             return response
-        except (ValueError | JSONDecodeError) as e:
+        except (ValueError, JSONDecodeError) as e:
             self._logger.error(f"Error occurs when handling REST response = {response.text}", e)
             raise e
         except Exception as e:
