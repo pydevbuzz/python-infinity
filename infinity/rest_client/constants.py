@@ -56,7 +56,6 @@ SIDE = "side"
 STATUS = "status"
 ACCOUNT_ID = "accountId"
 
-
 # Order status
 ON_BOOK = "on_book"
 DONE = "done"
@@ -121,8 +120,7 @@ PUBLIC_GET_UNDERLYING_TOKENS_ENDPOINT = "/public/get_underlying_tokens"
 PRIVATE_AGGREGATE_ORDERS_BY_RATE_ENDPOINT = "/private/aggregate_orders_by_rate"
 PRIVATE_BATCH_CANCEL_FIXED_ORDERS_ENDPOINT = "/private/batch_cancel_fixed_orders"
 PRIVATE_BATCH_CANCEL_FLOATING_ORDERS_ENDPOINT = "/private/batch_cancel_floating_orders"
-PRIVATE_CANCEL_FIXED_ORDER_ENDPOINT = "/private/cancel_fixed_order"
-PRIVATE_CANCEL_FLOATING_ORDER_ENDPOINT = "/private/cancel_floating_order"
+PRIVATE_CANCEL_ORDER_ENDPOINT = "/api/trade/cancel-order"
 PRIVATE_CREATE_FIXED_ORDER_ENDPOINT = "/private/create_fixed_order"
 PRIVATE_CREATE_FLOATING_ORDER_ENDPOINT = "/private/create_floating_order"
 PRIVATE_GET_FIXED_ORDERS_ENDPOINT = "/private/get_fixed_orders"
@@ -131,7 +129,6 @@ PRIVATE_GET_FLOATING_POSITIONS_ENDPOINT = "/private/get_floating_positions"
 PRIVATE_GET_FLOATING_TRADES_ENDPOINT = "/private/get_floating_trades"
 PRIVATE_GET_FIXED_TRADES_ENDPOINT = "/private/get_fixed_trades"
 PRIVATE_GET_ALL_POSITIONS_ENDPOINT = "/private/get_all_positions"
-PRIVATE_GET_POSITIONS_AND_DV01_ENDPOINT = "/private/get_positions_and_dv01"
 
 # *** User ***
 PRIVATE_GET_USER_INFO_ENDPOINT = "/private/get_user_info"
@@ -145,3 +142,8 @@ PRIVATE_GET_ACCOUNTS_ENDPOINT = "/private/get_accounts"
 PRIVATE_TRANSFER_FLOATING_POSITION_ENDPOINT = "/private/transfer_floating_position"
 PRIVATE_TRANSFER_TOKEN_ENDPOINT = "/private/transfer_token"
 PRIVATE_UPDATE_ACCOUNT_NAME_ENDPOINT = "/private/update_account_name"
+
+# will be deprecated
+PRIVATE_CANCEL_FIXED_ORDER_ENDPOINT = "/private/cancel_fixed_order"
+PRIVATE_CANCEL_FLOATING_ORDER_ENDPOINT = "/private/cancel_floating_order"
+PRIVATE_GET_POSITIONS_AND_DV01_ENDPOINT = "/private/get_positions_and_dv01"

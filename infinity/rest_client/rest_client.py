@@ -11,6 +11,7 @@ import infinity.rest_client.constants as constants
 from infinity.login.infinity_login import LoginClient
 from infinity.utils import RepeatTimer, generate_query_url, get_default_logger
 from infinity.rest_client.client_exceptions import *
+from warnings import warn
 
 
 class RestClient:
@@ -130,8 +131,6 @@ class RestClient:
         except Exception as e:
             self._logger.error(f"Unknown error occurs when handling REST response = {response.text}", e)
             raise e
-
-
 
     @staticmethod
     def _replace_placeholder_with_value(url: str, placeholder_constant: str, value: str):
@@ -991,7 +990,7 @@ class RestClient:
         datetimes, bucketed by the specified interval size (in minutes).
 
         Args:
-            instrument_id (int): instrument id of the floating rate market.
+            instrument_id (str): instrument id of the floating rate market.
             start (str): Start Date (of the form yyyymmdd) or Start Datetime
             end (str): End Date (of the form yyyymmdd) or End Datetime
             interval_minutes: Interval size in minutes for bucketing the returned data. If the interval size is more
@@ -1111,7 +1110,7 @@ class RestClient:
         transactions are returned. The maximum number of transactions that can be returned is 100.
 
         Args:
-            instrument_id (int): instrument id of the floating rate market.
+            instrument_id (str): instrument id of the floating rate market.
             limit (int): Maximum number of transactions. (Default value is 20. Maximum value is 100.)
 
         Returns:
@@ -1924,7 +1923,45 @@ class RestClient:
 
         return self._handle_response(response)
 
+    def cancel_order(self, instrument_id: str, order_id: int | None = None, client_order_id: str | None = None,
+                     account_id: int | None = None) -> dict:
+        """ Cancel an order by order id or client order id.
+
+        This cancels an order as specified by its Infinity Exchange order id or client order id.
+
+        Args:
+            instrument_id (str): Market instrument ID.
+            order_id (int): Exchange order ID (required if client order ID is not provided)
+            client_order_id (str): Client order ID (required if Infinity Exchange order ID is not provided)
+            account_id (int): account ID (Optional)
+
+        Returns:
+            response: Session response from attempting to cancel an order. Note a success boolean and empty
+                data dictionary are returned only. For example:
+
+            {}
+
+        """
+        url = self._API_BASE_URL + constants.PRIVATE_CANCEL_ORDER_ENDPOINT
+        if account_id is None:
+            account_id = self.account_id
+        params = {
+            constants.QUERY_KEY_ACCOUNT_ID: account_id,
+            constants.QUERY_KEY_INSTRUMENT_ID: instrument_id
+        }
+        if order_id is None and client_order_id is None:
+            raise InputParameterError("Please specify either order_id or client_order_id.")
+        if order_id is not None:
+            params.update({constants.QUERY_KEY_ORDER_ID: order_id})
+        elif client_order_id is not None:
+            params.update({constants.CLIENT_ORDER_ID: client_order_id})
+
+        url = generate_query_url(url=url, dict_query_params=params)
+        response = self._private_session.post(url=url, cookies=self._response_cookies)
+        return self._handle_response(response)
+
     def cancel_fixed_order(self, order_id: int) -> dict:
+        warn('cancel_fixed_order(/private/cancel_fixed_order) will be deprecated', DeprecationWarning, stacklevel=2)
         """ Cancel fixed rate order by order id.
 
         This cancels a fixed rate order as specified by its Infinity exchange order id.
@@ -1946,6 +1983,8 @@ class RestClient:
         return self._handle_response(response)
 
     def cancel_floating_order(self, order_id: int) -> dict:
+        warn('cancel_floating_order(/private/cancel_floating_order) will be deprecated', DeprecationWarning,
+             stacklevel=2)
         """ Cancel floating rate order by order id.
 
         This cancels a floating rate order as specified by its Infinity exchange order id.
@@ -1973,7 +2012,7 @@ class RestClient:
         This sends a fixed rate order to the Infinity exchange.
 
         Args:
-            instrument_id (int): Market instrument ID.
+            instrument_id (str): Market instrument ID.
             order_type (int): Order type (1 for market order, or 2 for limit order).
             side (int): Side (0 for lend order, or 1 for borrow order).
             quantity (float): Order quantity.
@@ -2389,93 +2428,40 @@ class RestClient:
         Returns:
             response: Session response from requesting user positions by account id. For example:
             {
-                "ir": [
-                    {
-                        "accountId": 202,
-                        "marketId": 1,
-                        "instrumentId": "ETH-SPOT",
-                        "mtm": "0",
-                        "pv": "-703220.629643912",
-                        "quantity": "-702938.5559",
-                        "interest": "-282.073743912",
-                        "tokenId": 1
-                    }
-                ],
-                "fr": {
-                    "1": [ // token id
+                "success": "True",
+                "data": {
+                    "accountPositions": [
                         {
-                            "accountId": 202,
-                            "marketId": 12006,
-                            "instrumentId": "ETH-2023-12-01",
-                            "rate": "0.15387772",
-                            "mtm": "-42.970918771",
-                            "pv": "-29591.498018771",
-                            "quantity": "-29548.5271",
+                            "accountId": 122,
                             "tokenId": 1,
-                            "dv01": "0.03237523966737814",
-                            "maturityDate": 1701417600000
-                        }
-                    ],
-                    "2": [
+                            "instrumentId": "ETH-SPOT",
+                            "price": "123",
+                            "quantity": "123",
+                            "accruedInterest": "424",
+                            "netPositions": "456",
+                            "mtm": "0",
+                            "pv": "456",
+                            "dv01": "0",
+                            "rollOverHour": 8
+                        },
                         {
-                            "accountId": 202,
-                            "marketId": 12008,
-                            "instrumentId": "USDT-2023-12-01",
-                            "rate": "0.04479815",
-                            "mtm": "0.023237649",
-                            "pv": "-498.84676235",
-                            "quantity": "-498.87",
-                            "tokenId": 2,
-                            "dv01": "0.00054653004432",
-                            "maturityDate": 1701417600000
-                        }
-
-                    ],
-                    "3": [
-                        {
-                            "accountId": 202,
-                            "marketId": 12007,
-                            "instrumentId": "USDC-2023-12-01",
-                            "rate": "0.0586",
-                            "mtm": "-0.062866093",
-                            "pv": "-492.622866093",
-                            "quantity": "-492.56",
-                            "tokenId": 3,
-                            "dv01": "0.00053962312288",
-                            "maturityDate": 1701417600000
-                        }
-                    ],
-                    "4": [
-                        {
-                            "accountId": 202,
-                            "marketId": 12145,
-                            "instrumentId": "DAI-2023-12-29",
-                            "rate": "0.18082241",
-                            "mtm": "-16.686652175",
-                            "pv": "-1539.686652175",
-                            "quantity": "-1523",
-                            "tokenId": 4,
-                            "dv01": "0.0133202926332",
-                            "maturityDate": 1703836800000
-                        }
-                    ],
-                    "5": [
-                        {
-                            "accountId": 202,
-                            "marketId": 12009,
-                            "instrumentId": "WBTC-2023-12-01",
-                            "rate": "0.02854112",
-                            "mtm": "-0.001522344",
-                            "pv": "5.467577655",
-                            "quantity": "5.4691",
-                            "tokenId": 5,
-                            "dv01": "-0.00000599138756489",
-                            "maturityDate": 1701417600000
+                            "accountId": 122,
+                            "tokenId": 1,
+                            "instrumentId": "ETH-2024-09-27",
+                            "rate": "0.123",
+                            "price": "123.00",
+                            "quantity": "-123.7171",
+                            "accruedInterest": "0",
+                            "netPositions": "-123.7171",
+                            "mtm": "0.473806606",
+                            "pv": "-0.243293394",
+                            "dv01": "0.83533694",
+                            "rollOverHour": 8,
+                            "maturityDate": 1727424000000
                         }
                     ]
                 }
             }
-
         """
         if account_id is None:
             account_id = self.account_id
@@ -2485,6 +2471,8 @@ class RestClient:
         return self._handle_response(response)
 
     def get_positions_and_dv01(self, account_id: int | None = None) -> dict:
+        warn('get_positions_and_dv01(/private/get_positions_and_dv01) will be deprecated', DeprecationWarning,
+             stacklevel=2)
         """ Get user's fixed rate positions and DV01.
 
         This gets the user's fixed rate positions and DV01 value for a given account id. If no account id is specified,
@@ -2521,7 +2509,6 @@ class RestClient:
 
         url = self._API_BASE_URL + constants.PRIVATE_GET_POSITIONS_AND_DV01_ENDPOINT
         url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ACCOUNT_ID: account_id})
-
         response = self._private_session.get(url=url, cookies=self._response_cookies)
         return self._handle_response(response)
 
