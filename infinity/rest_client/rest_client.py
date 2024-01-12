@@ -160,21 +160,24 @@ class RestClient:
         It is meant to be called periodically by a background thread
         to keep the REST session alive.
         """
-        # wait for refreshing/re-logging in process to finish
-        while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
-            time.sleep(0.001)
-        new_token = self._inf_login.get_access_token()
-        if self._access_token != new_token:
-            self._logger.info("Refreshing private REST session...")
-            with self.__private_rest_refresh_lock:
-                try:
-                    self._access_token = new_token
-                    self._private_session.headers = {"Content-Type": "application/json",
-                                                     "User-Agent": self._user_agent,
-                                                     "Authorization": "Bearer " + self._access_token}
-                    self._response_cookies = self._inf_login.get_cookies()
-                finally:
-                    self._logger.info("Private REST session is refreshed.")
+        if self.__private_rest_refresh_lock.locked():
+            self._logger.debug("private rest session is rotating access token, ignore duplicate refresh request.")
+        else:
+            # wait for refreshing/re-logging in process to finish
+            while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
+                time.sleep(0.001)
+            new_token = self._inf_login.get_access_token()
+            if self._access_token != new_token:
+                self._logger.info("Refreshing private REST session...")
+                with self.__private_rest_refresh_lock:
+                    try:
+                        self._access_token = new_token
+                        self._private_session.headers = {"Content-Type": "application/json",
+                                                         "User-Agent": self._user_agent,
+                                                         "Authorization": "Bearer " + self._access_token}
+                        self._response_cookies = self._inf_login.get_cookies()
+                    finally:
+                        self._logger.info("Private REST session is refreshed.")
 
     def login_success(self) -> bool:
         """Check if login was successful.

@@ -106,9 +106,9 @@ class LoginClient:
         """
         self.__refresh_event.cancel()
         self.__re_login_event.cancel()
-        if self.__refresh_lock.locked():
+        if self.is_refreshing_token():
             self.__refresh_lock.release()
-        if self.__re_login_lock.locked():
+        if self.is_re_logging_in():
             self.__re_login_lock.release()
         self._session.close()
         self._logger.info("HTTP session closed for Infinity Login.")
@@ -240,20 +240,23 @@ class LoginClient:
             LoginError: If re-login failed.
 
         """
-        self._logger.info("re-logging in...")
-        with self.__re_login_lock:
-            start_t = get_current_utc_timestamp()
-            try:
-                self.__refresh_event.cancel()
-                self.__refresh_lock.release()
-                self._login_success = False
-                self.do_login()
-                self.after_login()
-            except Exception as e:
-                self._logger.error("cannot re-login", exc_info=e)
-            finally:
-                time_spent = get_current_utc_timestamp() - start_t
-                self._logger.debug(f"re-logged in, time spent = {time_spent} seconds")
+        if self.is_re_logging_in():
+            self._logger.debug("infinity login client is re-logging in, ignore duplicate re-login request.")
+        else:
+            self._logger.info("re-logging in...")
+            with self.__re_login_lock:
+                start_t = get_current_utc_timestamp()
+                try:
+                    self.__refresh_event.cancel()
+                    self.__refresh_lock.release()
+                    self._login_success = False
+                    self.do_login()
+                    self.after_login()
+                except Exception as e:
+                    self._logger.error("cannot re-login", exc_info=e)
+                finally:
+                    time_spent = get_current_utc_timestamp() - start_t
+                    self._logger.debug(f"re-logged in, time spent = {time_spent} seconds")
 
     def get_cookies(self) -> RequestsCookieJar | None:
         """Get cookies from successful login response.
@@ -313,7 +316,7 @@ class LoginClient:
         if self.is_re_logging_in():
             self._logger.info("re-logging in user, ignore access token refresh.")
         elif self.is_refreshing_token():
-            self._logger.info("access token is refreshing, ignore duplicate access token refresh request")
+            self._logger.debug("access token is refreshing, ignore duplicate access token refresh request")
         elif self._access_token is None:
             self._logger.error(f"cannot find access token to refresh. Error: {traceback.format_exc()}")
         else:
