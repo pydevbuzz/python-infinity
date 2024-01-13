@@ -40,6 +40,7 @@ class RestClient:
         """
         self._user_agent = user_agent
         self._verify_tls = verify_tls
+        self._logger = logger
 
         self._inf_login = login
         self._private_session = None
@@ -49,8 +50,10 @@ class RestClient:
 
         if logger is None:
             self._logger = get_default_logger()
-        else:
-            self._logger = logger
+
+        if self._user_agent is None:
+            self._user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                + "Chrome/109.0.0.0 Safari/537.36")
 
         self._API_BASE_URL = rest_url
 
@@ -138,11 +141,13 @@ class RestClient:
     def _send_request(self, is_private: bool, method: str, **kwargs) -> dict | Exception:
         key = "private" if is_private else "public"
         try:
+            headers = {"Content-Type": "application/json", "User-Agent": self._user_agent}
             if is_private:
                 call = getattr(self._private_session, method)
+                headers.update({"Authorization": "Bearer " + self._inf_login.get_access_token()})
             else:
                 call = getattr(self._public_session, method)
-            response = call(**kwargs)
+            response = call(**kwargs, headers=headers)
             return self._handle_response(response)
         except ConnectionError as e:
             self._logger.error(f"{key} REST session fail to send request due to connection error={e}")
@@ -224,40 +229,29 @@ class RestClient:
         """
         self._logger.info("Initializing HTTP session for Infinity REST Public...")
         session = requests.session()
-        if self._user_agent is None:
-            self._user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
-                               + "Chrome/109.0.0.0 Safari/537.36"
-        headers = {"Content-Type": "application/json", "User-Agent": self._user_agent}
-        session.headers.update(headers)
         session.verify = self._verify_tls
         self._logger.info("Infinity REST Public session is created.")
         return session
 
-    def _init_private_session(self):
-        """
-        Initialize the private API session.
-
-        Creates a Requests Session for making authenticated
-        API calls to private endpoints.
-
-        Configures the session with the base URL, TLS verification,
-        user agent, and access token as needed.
-
-        Returns:
-            requests.Session: The configured private session.
-        """
-        self._logger.info("Initializing HTTP session for Infinity REST Private...")
-        session = requests.session()
-        if self._user_agent is None:
-            self._user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
-                               + "Chrome/109.0.0.0 Safari/537.36"
-        self._access_token = self._inf_login.get_access_token()
-        headers = {"Content-Type": "application/json", "User-Agent": self._user_agent,
-                   "Authorization": "Bearer " + self._access_token}
-        session.headers.update(headers)
-        session.verify = self._verify_tls
-        self._logger.info("Infinity REST Private session is created")
-        return session
+    # def _init_private_session(self):
+    #     """
+    #     Initialize the private API session.
+    #
+    #     Creates a Requests Session for making authenticated
+    #     API calls to private endpoints.
+    #
+    #     Configures the session with the base URL, TLS verification,
+    #     user agent, and access token as needed.
+    #
+    #     Returns:
+    #         requests.Session: The configured private session.
+    #     """
+    #     self._logger.info("Initializing HTTP session for Infinity REST Private...")
+    #     session = requests.session()
+    #     self._access_token = self._inf_login.get_access_token()
+    #     session.verify = self._verify_tls
+    #     self._logger.info("Infinity REST Private session is created")
+    #     return session
 
     def _close_session(self):
         """

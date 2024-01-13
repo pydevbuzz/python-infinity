@@ -64,6 +64,10 @@ class LoginClient:
         else:
             self._logger = logger
 
+        if self.__user_agent is None:
+            self.__user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                 "Chrome/109.0.0.0 Safari/537.36")
+
         self._API_BASE_URL = rest_url
         self._chain_id = chain_id
         # public session for login
@@ -87,14 +91,6 @@ class LoginClient:
         """
         self._logger.info("Initializing HTTP session for Infinity Login.")
         session = requests.session()
-
-        if self.__user_agent is None:
-            self.__user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
-                                + "Chrome/109.0.0.0 Safari/537.36"
-
-        headers = {"Content-Type": "application/x-www-form-urlencoded", "User-Agent": self.__user_agent}
-
-        session.headers.update(headers)
         session.verify = self.__verify_tls
         return session
 
@@ -114,6 +110,14 @@ class LoginClient:
             self.__re_login_lock.release()
         self._session.close()
         self._logger.info("HTTP session closed for Infinity Login.")
+
+    def __send_request(self, method: str, **kwargs) -> dict | Exception:
+        headers = {"Content-Type": "application/x-www-form-urlencoded", "User-Agent": self.__user_agent}
+        if self._access_token is not None:
+            headers["Authorization"] = f"Bearer {self._access_token}"
+        call = getattr(self._session, method)
+        response = call(**kwargs, headers=headers)
+        return self._handle_response(response=response)
 
     def is_login_success(self) -> bool:
         """
@@ -167,11 +171,11 @@ class LoginClient:
         # region get user login verify info
         try:
             body = {constants.ADDRESS: self._account_address, constants.CHAIN_ID: self._chain_id}
-            response = self._session.post(self._API_BASE_URL + constants.LOGIN_ENDPOINT, data=body)
-            verify_info = self._handle_response(response=response)
+            url = self._API_BASE_URL + constants.LOGIN_ENDPOINT
+            verify_info = self.__send_request("post", url=url, data=body)
             nonce = verify_info.get("nonceHash", None)
             eip712_message = verify_info.get("eip712Message", None)
-            if nonce is None or eip712_message is None or response.status_code != 200:
+            if nonce is None or eip712_message is None:
                 raise Exception
         except Exception as e:
             self._logger.fatal(f"Cannot get verify information to login, Error: {e}")
@@ -190,16 +194,13 @@ class LoginClient:
         try:
             body = {constants.ADDRESS: self._account_address, constants.NONCE_HASH: nonce,
                     "signature": signature}
-            response = self._session.post(self._API_BASE_URL + constants.VERIFY_LOGIN_ENDPOINT, data=body)
-            login_info = self._handle_response(response=response)
+            url = self._API_BASE_URL + constants.VERIFY_LOGIN_ENDPOINT
+            login_info = self.__send_request("post", url=url, data=body)
             self._access_token = login_info.get("accessToken", {}).get("token", None)
             if self._access_token is None:
                 self._logger.error("Fail to get access token when login")
                 raise Exception
             self._last_refresh_timestamp = get_current_utc_timestamp()
-            self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
-                                     "User-Agent": self.__user_agent,
-                                     "Authorization": "Bearer " + self._access_token}
             self._login_success = True
             time_spent = get_current_utc_timestamp() - start_t
             self._logger.info(f"User logged in, time spent = {time_spent} seconds.")
@@ -335,16 +336,13 @@ class LoginClient:
                 start_t = get_current_utc_timestamp()
                 try:
                     body = {constants.REFRESH_TOKEN: self._access_token}
-                    response = self._session.post(url=self._API_BASE_URL + constants.REFRESH_ENDPOINT, data=body)
-                    refresh_info = self._handle_response(response=response)
+                    url = self._API_BASE_URL + constants.REFRESH_ENDPOINT
+                    refresh_info = self.__send_request("post", url=url, data=body)
                     self._access_token = refresh_info.get("accessToken", {}).get("token", None)
                     if self._access_token is None:
                         self._logger.error("Fail to get refreshed access token")
                         raise Exception
                     self._last_refresh_timestamp = get_current_utc_timestamp()
-                    self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
-                                             "User-Agent": self.__user_agent,
-                                             "Authorization": "Bearer " + self._access_token}
                     time_spent = get_current_utc_timestamp() - start_t
                     self._logger.info(f"refreshed JWT token, time spent = {time_spent} seconds.")
                     self._login_success = True
