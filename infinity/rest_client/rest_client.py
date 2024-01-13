@@ -1,6 +1,6 @@
 import logging
-import threading
-import time
+# import threading
+# import time
 import traceback
 from datetime import date, timedelta
 from typing import List
@@ -44,7 +44,6 @@ class RestClient:
         self._inf_login = login
         self._private_session = None
         self._access_token = None
-        self._response_cookies = None
 
         self._order_id_map = {}
 
@@ -58,13 +57,15 @@ class RestClient:
         self._public_session = self._init_public_session()
 
         if self._inf_login:
+            self._logger.info("Initializing HTTP session for Infinity REST Private...")
             if self._inf_login.is_login_success():
-                self._private_session = self._init_private_session()
-                self.__private_rest_refresh_lock = threading.Lock()
-                self._response_cookies = self._inf_login.get_cookies()
-                refresh_interval = self._inf_login.get_refresh_interval() + 1  # 1s buffer
-                refresh_event = RepeatTimer(refresh_interval, self.refresh_rest_session)
-                refresh_event.start()
+                self._private_session = self._inf_login.private_session
+                self._logger.info("Infinity REST Private session is created")
+                # self._private_session = self._init_private_session()
+                # self.__private_rest_refresh_lock = threading.Lock()
+                # refresh_interval = self._inf_login.get_refresh_interval() + 1  # 1s buffer
+                # refresh_event = RepeatTimer(refresh_interval, self.refresh_rest_session)
+                # refresh_event.start()
                 self._account_id = self.get_account_id()
             else:
                 self._logger.warning("cannot login, please check login details")
@@ -144,7 +145,8 @@ class RestClient:
             response = call(**kwargs)
             return self._handle_response(response)
         except ConnectionError as e:
-            self._logger.warning(f"{key} REST session fail to send request due to {e}")
+            self._logger.error(f"{key} REST session fail to send request due to connection error={e}")
+            raise e
         except Exception as e:
             self._logger.error(f"{key} REST session fail to send request", exc_info=e)
             raise e
@@ -170,34 +172,33 @@ class RestClient:
 
     # *** Authentication ***
 
-    def refresh_rest_session(self):
-        """
-        Refresh the private REST session.
-
-        This renews the access token and re-initializes the private
-        session using the latest credentials from the LoginClient.
-
-        It is meant to be called periodically by a background thread
-        to keep the REST session alive.
-        """
-        if self.__private_rest_refresh_lock.locked():
-            self._logger.debug("private rest session is rotating access token, ignore duplicate refresh request.")
-        else:
-            # wait for refreshing/re-logging in process to finish
-            while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
-                time.sleep(0.001)
-            new_token = self._inf_login.get_access_token()
-            if self._access_token != new_token:
-                self._logger.info("Refreshing private REST session...")
-                with self.__private_rest_refresh_lock:
-                    try:
-                        self._access_token = new_token
-                        self._private_session.headers = {"Content-Type": "application/json",
-                                                         "User-Agent": self._user_agent,
-                                                         "Authorization": "Bearer " + self._access_token}
-                        self._response_cookies = self._inf_login.get_cookies()
-                    finally:
-                        self._logger.info("Private REST session is refreshed.")
+    # def refresh_rest_session(self):
+    #     """
+    #     Refresh the private REST session.
+    #
+    #     This renews the access token and re-initializes the private
+    #     session using the latest credentials from the LoginClient.
+    #
+    #     It is meant to be called periodically by a background thread
+    #     to keep the REST session alive.
+    #     """
+    #     if self.__private_rest_refresh_lock.locked():
+    #         self._logger.debug("private rest session is rotating access token, ignore duplicate refresh request.")
+    #     else:
+    #         # wait for refreshing/re-logging in process to finish
+    #         while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
+    #             time.sleep(0.001)
+    #         new_token = self._inf_login.get_access_token()
+    #         if self._access_token != new_token:
+    #             self._logger.info("Refreshing private REST session...")
+    #             with self.__private_rest_refresh_lock:
+    #                 try:
+    #                     self._access_token = new_token
+    #                     self._private_session.headers = {"Content-Type": "application/json",
+    #                                                      "User-Agent": self._user_agent,
+    #                                                      "Authorization": "Bearer " + self._access_token}
+    #                 finally:
+    #                     self._logger.info("Private REST session is refreshed.")
 
     def login_success(self) -> bool:
         """
@@ -254,8 +255,6 @@ class RestClient:
         headers = {"Content-Type": "application/json", "User-Agent": self._user_agent,
                    "Authorization": "Bearer " + self._access_token}
         session.headers.update(headers)
-        cookies = requests.utils.cookiejar_from_dict(self._response_cookies)
-        session.cookies.update(cookies)
         session.verify = self._verify_tls
         self._logger.info("Infinity REST Private session is created")
         return session
@@ -269,7 +268,10 @@ class RestClient:
         private APIs.
         """
         if self._private_session:
-            self._private_session.close()
+            self._logger.debug("Closing private session...")
+            self._private_session = None
+            self._inf_login.close_session()
+        self._logger.debug("Closing public session...")
         self._public_session.close()
         self._logger.debug("HTTP session closed.")
 

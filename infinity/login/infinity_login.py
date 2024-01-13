@@ -5,7 +5,6 @@ import traceback
 import requests
 from eth_account.messages import encode_structured_data
 from requests import JSONDecodeError
-from requests.cookies import RequestsCookieJar
 from web3.auto import w3
 from infinity.login import constants
 from infinity.login.client_exceptions import *
@@ -52,7 +51,6 @@ class LoginClient:
 
         self._session = None
         self._access_token = None
-        self._response_cookies = None
         self._last_refresh_timestamp = None
         self._refresh_interval = refresh_interval
         self._re_login_interval = re_login_interval
@@ -142,6 +140,7 @@ class LoginClient:
         """
         return self._account_address
 
+    @property
     def private_session(self) -> requests.Session:
         return self._session
 
@@ -201,7 +200,6 @@ class LoginClient:
             self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
                                      "User-Agent": self.__user_agent,
                                      "Authorization": "Bearer " + self._access_token}
-            self._response_cookies = response.cookies.get_dict()
             self._login_success = True
             time_spent = get_current_utc_timestamp() - start_t
             self._logger.info(f"User logged in, time spent = {time_spent} seconds.")
@@ -275,16 +273,6 @@ class LoginClient:
                     time_spent = get_current_utc_timestamp() - start_t
                     self._logger.debug(f"re-logged in, time spent = {time_spent} seconds")
 
-    def get_cookies(self) -> dict:
-        """
-        Get cookies from successful login response.
-
-        Returns:
-            dict: Dictionary containing response cookies.
-
-        """
-        return self._response_cookies
-
     def get_access_token(self) -> str:
         """
         Get current access token.
@@ -357,7 +345,6 @@ class LoginClient:
                     self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
                                              "User-Agent": self.__user_agent,
                                              "Authorization": "Bearer " + self._access_token}
-                    self._response_cookies = response.cookies.get_dict()
                     time_spent = get_current_utc_timestamp() - start_t
                     self._logger.info(f"refreshed JWT token, time spent = {time_spent} seconds.")
                     self._login_success = True
