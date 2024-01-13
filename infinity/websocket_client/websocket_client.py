@@ -25,6 +25,7 @@ class WebSocketClient:
         Args:
             ws_url (str): Websocket
             login (LoginClient): login to use private websocket
+            reconnect_interval (int): reconnect interval for websocket, default is 86400 seconds (24hours)
             auto_reconnect_retries (int): The number of times to attempt auto-reconnection in case of disconnection.
             logger (logging.Logger): The logger object to use for logging.
         """
@@ -72,11 +73,10 @@ class WebSocketClient:
             None
 
         Example:
-        websocket_client = InfinityWebsocket(environment="PROD", user_agent="MyApp/1.0",
-        account_address="0x123456789", private_key="my_private_key", verify_tls=True, do_login=True,
-        auto_reconnect_retries=3, logger=my_logger)
-
-        websocket_client.run_all()
+            websocket_client = InfinityWebsocketClient(ws_url="websocket url",
+                                          login=infinity_login, reconnect_interval=86400,
+                                          auto_reconnect_retries=3, logger=my_logger)
+            websocket_client.run_all()
         """
         self._logger.info("Initializing Infinity Public Websocket...")
         start_t = get_current_utc_timestamp()
@@ -137,6 +137,9 @@ class WebSocketClient:
         Creates a thread that connects to the private Infinity server.
         User need to log in first to get access token before connecting private websocket.
 
+        Args:
+            is_private(bool): flag to determine private or public websocket use, default is False as public websocket.
+
         Returns:
             threading.Thread: A thread of the private WebSocket session.
         """
@@ -152,6 +155,9 @@ class WebSocketClient:
     def create_ws(self, is_private: bool = False) -> None:
         """
         The public_connect function is used to connect the public websocket client.
+
+        Args:
+            is_private(bool): flag to determine private or public websocket use, default is False as public websocket.
 
         Returns:
             None
@@ -189,6 +195,9 @@ class WebSocketClient:
         """
         Re-subscribe to previously subscribed channels after reconnecting private websocket connection.
 
+        Args:
+            is_private(bool): flag to determine private or public websocket use, default is False as public websocket.
+
         Returns:
             None
         """
@@ -202,6 +211,15 @@ class WebSocketClient:
         self.send_message(message=resubscribe, is_private=is_private)
 
     def re_connect(self, is_private: bool = False) -> bool:
+        """
+        Reconnect websocket session. This function will close the old websocket session and re-establish a new session.
+
+        Args:
+            is_private(bool): flag to determine private or public websocket use, default is False as public websocket.
+
+        Returns:
+            bool: reconnected or not
+        """
         key = "private" if is_private else "public"
 
         if self._ws_clients[key].reconnect_lock.locked():
@@ -228,6 +246,9 @@ class WebSocketClient:
         InfinityWebsocket. (param: auto_reconnection_retries)
         If it fails, it will log a warning message and stop trying.
 
+        Args:
+            is_private(bool): flag to determine private or public websocket use, default is False as public websocket.
+
         Returns:
             None
         """
@@ -251,17 +272,6 @@ class WebSocketClient:
         """
         The disconnect function is used to close the websocket connection on
         both private and public websockets.
-
-        {
-            "ws_id": None,
-            "client": None,
-            "request_id": 1,
-            "reconnect_count": 0,
-            "subscribed_channels": [],
-            "reconnect_lock": threading.Lock(),
-            "is_open": False,
-            "force_reconnect_event": None
-        }
 
         Returns:
             None
@@ -360,6 +370,9 @@ class WebSocketClient:
     def private_ws_login(self) -> None:
         """
         Send ws login to private websocket session
+
+        Returns:
+            None
         """
         login_message = {
             "method": "LOGIN",
@@ -498,7 +511,7 @@ class WebSocketClient:
     @staticmethod
     def generate_param_str(instrument_id: str, channel: str) -> str:
         """
-        Generate the channel parameter for a websocket subscription/unsubscription.
+        Generate the channel parameter for a websocket subscription or un-subscription.
 
         Args:
             instrument_id (str): The instrument id for which the subscription is being made.

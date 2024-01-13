@@ -13,7 +13,8 @@ from infinity.utils import RepeatTimer, get_default_logger, get_current_utc_time
 
 
 class LoginClient:
-    """Client for handling Infinity login and authentication.
+    """
+    Client for handling Infinity login and authentication.
 
     Attributes:
         _login_success (bool): Whether login was successful or not
@@ -25,9 +26,10 @@ class LoginClient:
     """
 
     def __init__(self, rest_url: str, chain_id: str, account_address: str, private_key: str,
-                 verify_tls: bool = True, refresh_interval: int = 3540, re_login_interval: int = 604800,
+                 verify_tls: bool = True, refresh_interval: int = 3600, re_login_interval: int = 604800,
                  user_agent: str = None, logger: logging.Logger = None):
-        """Initialize the LoginClient.
+        """
+        Initialize the LoginClient.
 
         Args:
             rest_url (str): Base URL for Infinity REST API
@@ -36,7 +38,7 @@ class LoginClient:
             private_key (str): Private key
             verify_tls (bool, optional): Verify TLS certs. Defaults to True.
             refresh_interval (int, optional): Refresh interval in seconds.
-                                              Refer to JWT access token expiring days (default: 3540 seconds = 59 minutes)
+                                              Refer to JWT access token expiring days (default: 3600 seconds = 1 hour)
             re_login_interval (int, optional): Re-login interval in seconds. (default: 604800 seconds = 7 days)
             user_agent (str, optional): User agent string. Defaults to None.
             logger (logging.Logger, optional): Logger. Defaults to None.
@@ -72,7 +74,8 @@ class LoginClient:
         self.after_login()
 
     def init_session(self) -> requests.Session:
-        """Initialize an Infinity Login HTTP session.
+        """
+        Initialize an Infinity Login HTTP session.
 
         Creates and configures a requests Session object to be used for making
         API calls to the Infinity Login endpoints.
@@ -98,7 +101,8 @@ class LoginClient:
         return session
 
     def close_session(self) -> None:
-        """Close the Infinity Login HTTP session.
+        """
+        Close the Infinity Login HTTP session.
 
         Closes the requests Session used for making API calls to Infinity Login.
         This should be called when done interacting with Infinity Login to free up resources.
@@ -114,7 +118,8 @@ class LoginClient:
         self._logger.info("HTTP session closed for Infinity Login.")
 
     def is_login_success(self) -> bool:
-        """Check if login was successful.
+        """
+        Check if login was successful.
 
         Returns:
             bool: True if login succeeded, False otherwise.
@@ -124,7 +129,8 @@ class LoginClient:
 
     @property
     def account_address(self) -> str:
-        """ Return the user's account address.
+        """
+        Return the user's account address.
 
         This returns the user's public blockchain address that is currently connected to the Infinity exchange.
 
@@ -136,10 +142,14 @@ class LoginClient:
         """
         return self._account_address
 
+    def private_session(self) -> requests.Session:
+        return self._session
+
     # Login/ Logout
 
     def do_login(self) -> None:
-        """Perform login and get access token.
+        """
+        Perform login and get access token.
 
         Sends login request using the given blockchain address and chain id.
         And saves access token if login succeeds.
@@ -191,7 +201,7 @@ class LoginClient:
             self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
                                      "User-Agent": self.__user_agent,
                                      "Authorization": "Bearer " + self._access_token}
-            self._response_cookies = response.cookies
+            self._response_cookies = response.cookies.get_dict()
             self._login_success = True
             time_spent = get_current_utc_timestamp() - start_t
             self._logger.info(f"User logged in, time spent = {time_spent} seconds.")
@@ -201,6 +211,10 @@ class LoginClient:
         # endregion
 
     def after_login(self) -> None:
+        """
+        Set up repeat timer for refresh access token event and re-login event
+
+        """
         if self._login_success:
             self.__refresh_event = RepeatTimer(self._refresh_interval, self.refresh_access_token)
             self.__refresh_event.start()
@@ -209,7 +223,8 @@ class LoginClient:
                 self.__re_login_event.start()
 
     def is_refreshing_token(self):
-        """Check if access token refresh is in progress.
+        """
+        Check if access token refresh is in progress.
 
         Checks if another thread is currently refreshing the access token.
 
@@ -220,7 +235,8 @@ class LoginClient:
         return self.__refresh_lock.locked()
 
     def is_re_logging_in(self):
-        """Check if re-login is in progress.
+        """
+        Check if re-login is in progress.
 
         Checks if another thread is currently re-logging in to get a new access token.
 
@@ -231,7 +247,8 @@ class LoginClient:
         return self.__re_login_lock.locked()
 
     def re_login(self) -> None:
-        """Re-login to Infinity Exchange.
+        """
+        Re-login to Infinity Exchange.
 
         Performs full login flow to re-login and retrieve a new access token.
         Saves new access token if re-login succeeds.
@@ -258,8 +275,9 @@ class LoginClient:
                     time_spent = get_current_utc_timestamp() - start_t
                     self._logger.debug(f"re-logged in, time spent = {time_spent} seconds")
 
-    def get_cookies(self) -> RequestsCookieJar | None:
-        """Get cookies from successful login response.
+    def get_cookies(self) -> dict:
+        """
+        Get cookies from successful login response.
 
         Returns:
             dict: Dictionary containing response cookies.
@@ -268,7 +286,8 @@ class LoginClient:
         return self._response_cookies
 
     def get_access_token(self) -> str:
-        """Get current access token.
+        """
+        Get current access token.
 
         Returns:
             str: The access token string.
@@ -277,7 +296,8 @@ class LoginClient:
         return self._access_token
 
     def get_last_refresh_timestamp(self) -> float:
-        """Get last access token refresh utc timestamp. Login/re-login will update the timestamp as well.
+        """
+        Get last access token refresh utc timestamp. Login/re-login will update the timestamp as well.
 
         Returns:
             float: last access token refresh utc timestamp
@@ -285,7 +305,8 @@ class LoginClient:
         return self._last_refresh_timestamp
 
     def get_refresh_interval(self) -> int:
-        """Get the refresh interval for the access token.
+        """
+        Get the refresh interval for the access token.
 
         Returns:
             int: The refresh interval in seconds.
@@ -295,7 +316,8 @@ class LoginClient:
 
     @property
     def chain_id(self):
-        """Get the chain ID.
+        """
+        Get the chain ID.
 
         Returns:
             str: The chain ID.
@@ -304,7 +326,8 @@ class LoginClient:
         return self._chain_id
 
     def refresh_access_token(self) -> None:
-        """Refresh access token to extend expiration.
+        """
+        Refresh access token to extend expiration.
 
         Sends refresh token request to get new access token.
         Saves new token if refresh succeeds.
@@ -324,8 +347,7 @@ class LoginClient:
                 start_t = get_current_utc_timestamp()
                 try:
                     body = {constants.REFRESH_TOKEN: self._access_token}
-                    response = self._session.post(url=self._API_BASE_URL + constants.REFRESH_ENDPOINT, data=body,
-                                                  cookies=self._response_cookies)
+                    response = self._session.post(url=self._API_BASE_URL + constants.REFRESH_ENDPOINT, data=body)
                     refresh_info = self._handle_response(response=response)
                     self._access_token = refresh_info.get("accessToken", {}).get("token", None)
                     if self._access_token is None:
@@ -335,7 +357,7 @@ class LoginClient:
                     self._session.headers = {"Content-Type": "application/x-www-form-urlencoded",
                                              "User-Agent": self.__user_agent,
                                              "Authorization": "Bearer " + self._access_token}
-                    self._response_cookies = response.cookies
+                    self._response_cookies = response.cookies.get_dict()
                     time_spent = get_current_utc_timestamp() - start_t
                     self._logger.info(f"refreshed JWT token, time spent = {time_spent} seconds.")
                     self._login_success = True
@@ -343,7 +365,8 @@ class LoginClient:
                     self._logger.error("cannot refresh access token in Infinity Login", exc_info=e)
 
     def _handle_response(self, response: requests.Response) -> dict | Exception:
-        """ Handle response from Infinity's REST APIs
+        """
+        Handle response from Infinity's REST APIs
 
         This handles the response from Infinity's REST APIs before returning to the user. If the response is successful,
         the data portion (if available) of the response is returned, otherwise the whole response. If the response
