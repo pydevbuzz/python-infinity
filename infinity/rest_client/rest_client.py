@@ -1959,7 +1959,8 @@ class RestClient:
 
     def cancel_order(self, instrument_id: str, order_id: int | None = None, client_order_id: str | None = None,
                      account_id: int | None = None) -> dict:
-        """ Cancel an order by order id or client order id.
+        """
+        Cancel an order by order id or client order id.
 
         This cancels an order as specified by its Infinity Exchange order id or client order id.
 
@@ -1991,50 +1992,6 @@ class RestClient:
             params.update({constants.CLIENT_ORDER_ID: client_order_id})
 
         url = generate_query_url(url=url, dict_query_params=params)
-        response = self._private_session.post(url=url, cookies=self._response_cookies)
-        return self._handle_response(response)
-
-    def cancel_fixed_order(self, order_id: int) -> dict:
-        warn('cancel_fixed_order(/private/cancel_fixed_order) will be deprecated', DeprecationWarning, stacklevel=2)
-        """ Cancel fixed rate order by order id.
-
-        This cancels a fixed rate order as specified by its Infinity exchange order id.
-
-        Args:
-            order_id (int): Exchange order ID.
-
-        Returns:
-            response: Session response from attempting to cancel a fixed rate order. Note a success boolean and empty
-                data dictionary are returned only. For example:
-
-            {}
-
-        """
-
-        url = self._API_BASE_URL + constants.PRIVATE_CANCEL_FIXED_ORDER_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ORDER_ID: order_id})
-        return self._send_request(is_private=True, method="post", url=url)
-
-    def cancel_floating_order(self, order_id: int) -> dict:
-        warn('cancel_floating_order(/private/cancel_floating_order) will be deprecated', DeprecationWarning,
-             stacklevel=2)
-        """ Cancel floating rate order by order id.
-
-        This cancels a floating rate order as specified by its Infinity exchange order id.
-
-        Args:
-            order_id (int): Exchange order ID.
-
-        Returns:
-            response: Session response from attempting to cancel a floating rate order. Note a success boolean and empty
-                data dictionary are returned only. For example:
-
-            {}
-
-        """
-
-        url = self._API_BASE_URL + constants.PRIVATE_CANCEL_FLOATING_ORDER_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params={constants.QUERY_KEY_ORDER_ID: order_id})
         return self._send_request(is_private=True, method="post", url=url)
 
     def create_fixed_order(self, instrument_id: str, order_type: int, side: int, quantity: float,
