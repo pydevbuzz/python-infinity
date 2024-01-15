@@ -4,15 +4,16 @@ import traceback
 from datetime import date, timedelta
 from typing import List
 from uuid import uuid4
+from warnings import warn
+
 import requests
 from requests.exceptions import JSONDecodeError
 from urllib3.exceptions import ProtocolError
 
 import infinity.rest_client.constants as constants
 from infinity.login.infinity_login import LoginClient
-from infinity.utils import RepeatTimer, generate_query_url, get_default_logger
 from infinity.rest_client.client_exceptions import *
-from warnings import warn
+from infinity.utils import generate_query_url, get_default_logger
 
 
 class RestClient:
@@ -45,7 +46,6 @@ class RestClient:
         self._logger = logger
 
         self._inf_login = login
-        self._private_session = None
         self._access_token = None
 
         self._order_id_map = {}
@@ -64,18 +64,12 @@ class RestClient:
         if self._inf_login:
             self._logger.info("Initializing HTTP session for Infinity REST Private...")
             if self._inf_login.is_login_success():
-                self._private_session = self._inf_login.private_session
                 self._logger.info("Infinity REST Private session is created")
-                # self._private_session = self._init_private_session()
-                # self.__private_rest_refresh_lock = threading.Lock()
-                # refresh_interval = self._inf_login.get_refresh_interval() + 1  # 1s buffer
-                # refresh_event = RepeatTimer(refresh_interval, self.refresh_rest_session)
-                # refresh_event.start()
                 self._account_id = self.get_account_id()
             else:
                 self._logger.warning("cannot login, please check login details")
 
-    def _handle_response(self, response: requests.Response) -> dict | Exception:
+    def _handle_response(self, response: requests.Response, is_private: bool) -> dict | Exception:
         """
         Handle response from Infinity's REST APIs
 
@@ -86,16 +80,18 @@ class RestClient:
         Args:
             response: The response from a call to an Infinity REST API (typically done through our public functions in
             this python file).
+            is_private (bool): Whether the response is from a private API call or not.
 
         Returns:
             response: The data portion (in json format) of the Infinity REST API response if available; the entire
                 response (in json format) otherwise.
 
         """
+        key = "private" if is_private else "public"
         try:
             if not str(response.status_code).startswith("2"):
                 trace_msg = traceback.format_exc()
-                error_message = (" - request to Infinity Exchange failed, " +
+                error_message = (f" - {key} request to Infinity Exchange failed, " +
                                  f"full response {response.text}, traceback: {trace_msg}")
                 if str(response.status_code) == "400":
                     raise BadRequestError(response=response,
@@ -133,11 +129,14 @@ class RestClient:
                 res = res["data"]
             response = self._parse_orders(response=res)
             return response
+        except ProtocolError as e:
+            self._logger.error(f"{key} REST session fail to send request due to connection error={e}")
+            raise e
         except (ValueError, JSONDecodeError) as e:
-            self._logger.error(f"Error occurs when handling REST response = {response.text}", exc_info=e)
+            self._logger.error(f"Error occurs when handling REST {key} response = {response.text}", exc_info=e)
             raise e
         except Exception as e:
-            self._logger.error(f"Unknown error occurs when handling REST response = {response.text}", exc_info=e)
+            self._logger.error(f"Unknown error occurs when handling REST {key} response = {response.text}", exc_info=e)
             raise e
 
     def _send_request(self, is_private: bool, method: str, **kwargs) -> dict | Exception:
@@ -145,7 +144,7 @@ class RestClient:
         try:
             headers = {"Content-Type": "application/json", "User-Agent": self._user_agent}
             if is_private:
-                current_session = self._private_session
+                current_session = self._inf_login.private_session
                 while self._inf_login.is_re_logging_in() or self._inf_login.is_refreshing_token():
                     time.sleep(0.001)
                 headers.update({"Authorization": "Bearer " + self._inf_login.get_access_token()})
@@ -154,10 +153,7 @@ class RestClient:
             with current_session as session:
                 call = getattr(session, method)
                 response = call(**kwargs, headers=headers)
-                return self._handle_response(response)
-        except ProtocolError as e:
-            self._logger.error(f"{key} REST session fail to send request due to connection error={e}")
-            raise e
+                return self._handle_response(response=response, is_private=is_private)
         except Exception as e:
             self._logger.error(f"{key} REST session fail to send request", exc_info=e)
             raise e
@@ -182,35 +178,6 @@ class RestClient:
         return url.replace(placeholder_constant, value)
 
     # *** Authentication ***
-
-    # def refresh_rest_session(self):
-    #     """
-    #     Refresh the private REST session.
-    #
-    #     This renews the access token and re-initializes the private
-    #     session using the latest credentials from the LoginClient.
-    #
-    #     It is meant to be called periodically by a background thread
-    #     to keep the REST session alive.
-    #     """
-    #     if self.__private_rest_refresh_lock.locked():
-    #         self._logger.debug("private rest session is rotating access token, ignore duplicate refresh request.")
-    #     else:
-    #         # wait for refreshing/re-logging in process to finish
-    #         while self._inf_login.is_refreshing_token() or self._inf_login.is_re_logging_in():
-    #             time.sleep(0.001)
-    #         new_token = self._inf_login.get_access_token()
-    #         if self._access_token != new_token:
-    #             self._logger.info("Refreshing private REST session...")
-    #             with self.__private_rest_refresh_lock:
-    #                 try:
-    #                     self._access_token = new_token
-    #                     self._private_session.headers = {"Content-Type": "application/json",
-    #                                                      "User-Agent": self._user_agent,
-    #                                                      "Authorization": "Bearer " + self._access_token}
-    #                 finally:
-    #                     self._logger.info("Private REST session is refreshed.")
-
     def login_success(self) -> bool:
         """
         Check if login was successful.
@@ -239,26 +206,6 @@ class RestClient:
         self._logger.info("Infinity REST Public session is created.")
         return session
 
-    # def _init_private_session(self):
-    #     """
-    #     Initialize the private API session.
-    #
-    #     Creates a Requests Session for making authenticated
-    #     API calls to private endpoints.
-    #
-    #     Configures the session with the base URL, TLS verification,
-    #     user agent, and access token as needed.
-    #
-    #     Returns:
-    #         requests.Session: The configured private session.
-    #     """
-    #     self._logger.info("Initializing HTTP session for Infinity REST Private...")
-    #     session = requests.session()
-    #     self._access_token = self._inf_login.get_access_token()
-    #     session.verify = self._verify_tls
-    #     self._logger.info("Infinity REST Private session is created")
-    #     return session
-
     def _close_session(self):
         """
         Close the private API session.
@@ -267,9 +214,8 @@ class RestClient:
         API calls. Should be called when done using the
         private APIs.
         """
-        if self._private_session:
+        if self._inf_login.is_login_success():
             self._logger.debug("Closing private session...")
-            self._private_session = None
             self._inf_login.close_session()
         self._logger.debug("Closing public session...")
         self._public_session.close()

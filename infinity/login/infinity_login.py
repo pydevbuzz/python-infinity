@@ -5,6 +5,7 @@ import traceback
 import requests
 from eth_account.messages import encode_structured_data
 from requests import JSONDecodeError
+from urllib3.exceptions import ProtocolError
 from web3.auto import w3
 from infinity.login import constants
 from infinity.login.client_exceptions import *
@@ -111,7 +112,7 @@ class LoginClient:
         self._session.close()
         self._logger.info("HTTP session closed for Infinity Login.")
 
-    def __send_request(self, method: str, **kwargs) -> dict | Exception:
+    def __send_auth_request(self, method: str, **kwargs) -> dict | Exception:
         headers = {"Content-Type": "application/x-www-form-urlencoded", "User-Agent": self.__user_agent}
         if self._access_token is not None:
             headers["Authorization"] = f"Bearer {self._access_token}"
@@ -172,7 +173,7 @@ class LoginClient:
         try:
             body = {constants.ADDRESS: self._account_address, constants.CHAIN_ID: self._chain_id}
             url = self._API_BASE_URL + constants.LOGIN_ENDPOINT
-            verify_info = self.__send_request("post", url=url, data=body)
+            verify_info = self.__send_auth_request("post", url=url, data=body)
             nonce = verify_info.get("nonceHash", None)
             eip712_message = verify_info.get("eip712Message", None)
             if nonce is None or eip712_message is None:
@@ -195,7 +196,7 @@ class LoginClient:
             body = {constants.ADDRESS: self._account_address, constants.NONCE_HASH: nonce,
                     "signature": signature}
             url = self._API_BASE_URL + constants.VERIFY_LOGIN_ENDPOINT
-            login_info = self.__send_request("post", url=url, data=body)
+            login_info = self.__send_auth_request("post", url=url, data=body)
             self._access_token = login_info.get("accessToken", {}).get("token", None)
             if self._access_token is None:
                 self._logger.error("Fail to get access token when login")
@@ -215,8 +216,9 @@ class LoginClient:
 
         """
         if self._login_success:
-            self.__refresh_event = RepeatTimer(self._refresh_interval, self.refresh_access_token)
-            self.__refresh_event.start()
+            if self.__refresh_event is None:
+                self.__refresh_event = RepeatTimer(self._refresh_interval, self.refresh_access_token)
+                self.__refresh_event.start()
             if self.__re_login_event is None:
                 self.__re_login_event = RepeatTimer(self._re_login_interval, self.re_login)
                 self.__re_login_event.start()
@@ -265,6 +267,7 @@ class LoginClient:
                 try:
                     self.__refresh_event.cancel()
                     self.__refresh_lock.release()
+                    self.__refresh_event = None
                     self._login_success = False
                     self.do_login()
                     self.after_login()
@@ -337,7 +340,7 @@ class LoginClient:
                 try:
                     body = {constants.REFRESH_TOKEN: self._access_token}
                     url = self._API_BASE_URL + constants.REFRESH_ENDPOINT
-                    refresh_info = self.__send_request("post", url=url, data=body)
+                    refresh_info = self.__send_auth_request("post", url=url, data=body)
                     self._access_token = refresh_info.get("accessToken", {}).get("token", None)
                     if self._access_token is None:
                         self._logger.error("Fail to get refreshed access token")
@@ -406,6 +409,9 @@ class LoginClient:
             if "data" in res:
                 res = res["data"]
             return res
+        except ProtocolError as e:
+            self._logger.error(f"Login session fail to send request due to connection issue, error = {e}")
+            raise e
         except (ValueError, JSONDecodeError) as e:
             self._logger.error(f"Error occurs when handling login response = {response.text}", exc_info=e)
             raise e
