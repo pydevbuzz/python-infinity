@@ -33,12 +33,11 @@ class WebSocketClient:
         self._ws_clients = {
             "public": WebsocketHandler(), "private": WebsocketHandler()
         }
-
+        self._logger = logger
         self.__ping_timeout = 30
         self.__ping_interval = 60
         self._ws_url = ws_url
         self.__reconnect_interval = reconnect_interval
-
         self._inf_login = login
         self._auto_reconnection_retries = auto_reconnect_retries
         self._subscribed_data_dict = {
@@ -50,8 +49,6 @@ class WebSocketClient:
 
         if logger is None:
             self._logger = get_default_logger()
-        else:
-            self._logger = logger
 
         if self._inf_login:
             if not self._inf_login.is_login_success():
@@ -967,7 +964,7 @@ class WebSocketClient:
         """
         is_private = self.is_ws_private(ws_id=ws_id)
         key = "private" if is_private else "public"
-        self._logger.debug(f"{is_private} websocket(id={ws_id}) got pong, no need to reply.")
+        self._logger.debug(f"{key} websocket(id={ws_id}) got pong, no need to reply.")
 
     def is_ws_private(self, ws_id: str) -> bool:
         """

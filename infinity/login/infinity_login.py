@@ -62,8 +62,6 @@ class LoginClient:
 
         if logger is None:
             self._logger = get_default_logger()
-        else:
-            self._logger = logger
 
         if self.__user_agent is None:
             self.__user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
