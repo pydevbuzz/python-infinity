@@ -1,12 +1,13 @@
 import logging
-# import threading
-# import time
+import time
 import traceback
 from datetime import date, timedelta
 from typing import List
 from uuid import uuid4
 import requests
 from requests.exceptions import JSONDecodeError
+from urllib3.exceptions import ProtocolError
+
 import infinity.rest_client.constants as constants
 from infinity.login.infinity_login import LoginClient
 from infinity.utils import RepeatTimer, generate_query_url, get_default_logger
@@ -52,8 +53,8 @@ class RestClient:
             self._logger = get_default_logger()
 
         if self._user_agent is None:
-            self._user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                                + "Chrome/109.0.0.0 Safari/537.36")
+            self._user_agent = ("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                                "Chrome/72.0.3626.119 Safari/537.36")
 
         self._API_BASE_URL = rest_url
 
@@ -143,13 +144,17 @@ class RestClient:
         try:
             headers = {"Content-Type": "application/json", "User-Agent": self._user_agent}
             if is_private:
-                call = getattr(self._private_session, method)
+                current_session = self._private_session
+                while self._inf_login.is_re_logging_in() or self._inf_login.is_refreshing_token():
+                    time.sleep(0.001)
                 headers.update({"Authorization": "Bearer " + self._inf_login.get_access_token()})
             else:
-                call = getattr(self._public_session, method)
-            response = call(**kwargs, headers=headers)
-            return self._handle_response(response)
-        except ConnectionError as e:
+                current_session = self._public_session
+            with current_session as session:
+                call = getattr(session, method)
+                response = call(**kwargs, headers=headers)
+                return self._handle_response(response)
+        except ProtocolError as e:
             self._logger.error(f"{key} REST session fail to send request due to connection error={e}")
             raise e
         except Exception as e:
