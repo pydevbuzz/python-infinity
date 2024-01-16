@@ -46,6 +46,7 @@ class LoginClient:
         """
         self._login_success = False
         self.__user_agent = user_agent
+        self._logger = logger
         self._account_address = account_address
         self.__private_key = private_key
         self.__verify_tls = verify_tls
@@ -72,7 +73,6 @@ class LoginClient:
         # public session for login
         self._session = self.init_session()
         self.do_login()
-        self.after_login()
 
     def init_session(self) -> requests.Session:
         """
@@ -89,7 +89,7 @@ class LoginClient:
 
         """
         self._logger.info("Initializing HTTP session for Infinity Login.")
-        session = requests.session()
+        session = requests.Session()
         session.verify = self.__verify_tls
         return session
 
@@ -203,6 +203,7 @@ class LoginClient:
             self._login_success = True
             time_spent = get_current_utc_timestamp() - start_t
             self._logger.info(f"User logged in, time spent = {time_spent} seconds.")
+            self.after_login()
         except Exception as e:
             self._logger.error(f"Cannot get user login info.", exc_info=e)
             os._exit(1)
@@ -211,7 +212,6 @@ class LoginClient:
     def after_login(self) -> None:
         """
         Set up repeat timer for refresh access token event and re-login event
-
         """
         if self._login_success:
             if self.__refresh_event is None:
@@ -268,7 +268,6 @@ class LoginClient:
                     self.__refresh_event = None
                     self._login_success = False
                     self.do_login()
-                    self.after_login()
                 except Exception as e:
                     self._logger.error("cannot re-login", exc_info=e)
                 finally:
@@ -407,7 +406,7 @@ class LoginClient:
             if "data" in res:
                 res = res["data"]
             return res
-        except ProtocolError as e:
+        except (ProtocolError, requests.exceptions.ConnectionError) as e:
             self._logger.error(f"Login session fail to send request due to connection issue, error = {e}")
             raise e
         except (ValueError, JSONDecodeError) as e:

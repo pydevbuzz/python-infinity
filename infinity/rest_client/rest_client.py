@@ -129,7 +129,7 @@ class RestClient:
                 res = res["data"]
             response = self._parse_orders(response=res)
             return response
-        except ProtocolError as e:
+        except (ProtocolError, requests.exceptions.ConnectionError) as e:
             self._logger.error(f"{key} REST session fail to send request due to connection error={e}")
             raise e
         except (ValueError, JSONDecodeError) as e:
@@ -150,10 +150,9 @@ class RestClient:
                 headers.update({"Authorization": "Bearer " + self._inf_login.get_access_token()})
             else:
                 current_session = self._public_session
-            with current_session as session:
-                call = getattr(session, method)
-                response = call(**kwargs, headers=headers)
-                return self._handle_response(response=response, is_private=is_private)
+            call = getattr(current_session, method)
+            response = call(**kwargs, headers=headers)
+            return self._handle_response(response=response, is_private=is_private)
         except Exception as e:
             self._logger.error(f"{key} REST session fail to send request", exc_info=e)
             raise e
@@ -201,7 +200,7 @@ class RestClient:
             requests.Session: The configured public session.
         """
         self._logger.info("Initializing HTTP session for Infinity REST Public...")
-        session = requests.session()
+        session = requests.Session()
         session.verify = self._verify_tls
         self._logger.info("Infinity REST Public session is created.")
         return session
@@ -310,12 +309,12 @@ class RestClient:
         """
 
         url = self._API_BASE_URL + constants.PRIVATE_WITHDRAW_ENDPOINT
-        json_body = {
+        data = {
             constants.QUERY_KEY_TOKEN_ID: token_id,
             constants.QUERY_KEY_QUANTITY: quantity,
             constants.QUERY_KEY_CHAIN_ID: chain_id
         }
-        return self._send_request(is_private=True, method="post", url=url, json_body=json_body)
+        return self._send_request(is_private=True, method="post", url=url, json=data)
 
     def get_blockchain_info(self, blockchain_id: int) -> dict:
         """
