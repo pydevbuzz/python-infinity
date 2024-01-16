@@ -1,9 +1,27 @@
+import datetime
 import logging
+import uuid
 from threading import Thread, Timer
 from urllib.parse import urlencode
 
 # to ignore connection pool warning
 logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+
+
+def generate_uuid() -> str:
+    return str(uuid.uuid1())
+
+
+def get_current_utc_timestamp() -> float:
+    """
+    Get current time in UTC timestamp format
+
+    Returns:
+        float: current time in UTC timestamp format
+    """
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    utc_time = dt.replace(tzinfo=datetime.timezone.utc)
+    return utc_time.timestamp()
 
 
 def generate_query_url(url: str, dict_query_params: dict):

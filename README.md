@@ -47,8 +47,7 @@ For feedback or suggestions, please reach out via one of the contact methods spe
 
 | Release Version | Changelog                                    |
 |-----------------|----------------------------------------------|
-| `0.0.4`         | Stable release for testnet (**recommended**) |
-| `0.0.5a2`       | pre-release version                          |
+| `0.0.5`         | Stable release for testnet (**recommended**) |
 
 
 ## Documentation
@@ -150,7 +149,7 @@ Usage example:
 
 ```python
 # Public endpoint method example
-market_info_floating_rate = infinity_rest.get_floating_rate(instrument_id=1)
+market_info_floating_rate = infinity_rest.get_floating_rate(instrument_id="ETH-SPOT")
 
 # Private endpoint method example
 user_info = infinity_rest.get_user_info()
@@ -161,15 +160,17 @@ Create a WEBSOCKET client instance, parse the infinity_login instance from <code
 LoginClient class</code> for private channel usage.
 
 Please refer to the documentation for information on how to use other parameters.
+
 ```python
 from infinity.websocket_client import WebSocketClient as InfinityWebsocketClient
+
 # =============================================================================
 # For public WEBSOCKET channel
 # =============================================================================
 infinity_public_ws = InfinityWebsocketClient(ws_url="Infinity Exchange Websocket URL",
-                                      auto_reconnect_retries=3) # default is 0 which would disable reconnection retries
+                                             auto_reconnect_retries=3)  # default is 0 which would disable reconnection retries
 infinity_public_ws.run_all()
-infinity_public_ws.disconnect_all() # disconnect all the websocket connection
+infinity_public_ws.disconnect_all_ws_connection()  # disconnect all the websocket connection
 # =============================================================================
 # For private and public WEBSOCKET channel
 # =============================================================================
@@ -178,7 +179,7 @@ infinity_ws = InfinityWebsocketClient(ws_url="Infinity Exchange Websocket URL",
                                       auto_reconnect_retries=3)
 infinity_ws.run_all()
 
-infinity_ws.disconnect_all() # disconnect all the websocket connection
+infinity_ws.disconnect_all_ws_connection()  # disconnect all the websocket connection
 ```
 
 Usage example - channel subscription / unsubscription:
