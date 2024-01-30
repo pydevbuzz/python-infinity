@@ -118,8 +118,7 @@ PUBLIC_GET_UNDERLYING_TOKENS_ENDPOINT = "/public/get_underlying_tokens"
 
 # *** Trading ***
 PRIVATE_AGGREGATE_ORDERS_BY_RATE_ENDPOINT = "/private/aggregate_orders_by_rate"
-PRIVATE_BATCH_CANCEL_FIXED_ORDERS_ENDPOINT = "/private/batch_cancel_fixed_orders"
-PRIVATE_BATCH_CANCEL_FLOATING_ORDERS_ENDPOINT = "/private/batch_cancel_floating_orders"
+PRIVATE_BATCH_CANCEL_ORDERS_ENDPOINT = "/api/trade/cancel-batch-orders"
 PRIVATE_CANCEL_ORDER_ENDPOINT = "/api/trade/cancel-order"
 PRIVATE_CREATE_FIXED_ORDER_ENDPOINT = "/private/create_fixed_order"
 PRIVATE_CREATE_FLOATING_ORDER_ENDPOINT = "/private/create_floating_order"

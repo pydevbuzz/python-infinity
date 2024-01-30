@@ -1,6 +1,6 @@
 # python-infinity
 
-This is an Python3 connector for Infinity exchange's REST APIs and WebSocket.
+This is a Python3 connector for Infinity exchange's REST APIs and WebSocket.
 
 Please note that the python-infinity package is an <b>unofficial</b> project and should be used at your own risk.
 It is <b>NOT</b> affiliated with the Infinity exchange and does <b>NOT</b> provide financial or investment advice.
@@ -48,6 +48,7 @@ For feedback or suggestions, please reach out via one of the contact methods spe
 | Release Version | Changelog                                    |
 |-----------------|----------------------------------------------|
 | `0.0.5`         | Stable release for testnet (**recommended**) |
+| `0.0.6a1`       | Dev release                                  |
 
 
 ## Documentation
@@ -246,6 +247,132 @@ def process_user_order(self, user_order: dict) -> None:
 def process_user_trade(self, user_trade: dict) -> None:
     pass # please refer to websocket client's process_user_trade
 ```
+
+## Error Codes
+
+Infinity Exchange uses the following error codes:
+
+| Error code | Description                    |
+|------------|--------------------------------|
+| 1          | Success                        |
+| 2          | Permission Denied              |
+| 9          | Unexpected Error               |
+| 1000       | Pemission Denied               |
+| 1001       | Validation Error               |
+| 1002       | Operation Failed               |
+| 9999       | Unexpected Error               |
+| 10000      | Invalid Wallet (Deposit)       |
+| 10001      | Invalid Token (Deposit)        |
+| 10010      | Invalid Wallet (Withdraw)      |
+| 10011      | Invalid Token (Withdraw)       |
+| 10012      | Not Enough Funds to Withdraw   |
+| 10020      | Not Enough Tokens To Liquidate |
+| 10021      | No Liquidation Steps Found     |
+| 10022      | Liquidation Swap Failed        |
+
+Order API error codes table
+
+| Error code | Description                   |
+|------------|-------------------------------|
+| 102        | INVALID_ACCOUNT               |
+| 104        | TIMEOUT                       |
+| 107        | MINIMUM_QUANTITY_NOT_REACH    |
+| 108        | NO_ORDER                      |
+| 109        | ORDER_DONE_OR_CANCELLED       |
+| 110        | TRADE_SERVER_PARSE            |
+| 111        | TRADE_SERVER_ORDER_BOOK_ERROR |
+| 112        | TRADE_SERVER_DB               |
+| 113        | TRADE_SERVER_DB_CONNECTION    |
+| 114        | MARKET_EXPIRED                |
+| 115        | RATE_TRANSACTION_ERROR        |
+| 120        | QUANTITY_STEP_NOT_MATCH       |
+| 121        | NO_TWAP                       |
+| 122        | INVALID_DEDUPLICATE_STRING    |
+| 191        | ORDER_AUTO_CANCELLED          |
+| 192        | ORDER_MANUALLY_CANCELLED      |
+
+## Orders
+
+### Order Sides
+
+| Boolean   | Side   |
+|-----------|--------|
+| 0 (False) | Lend   |
+| 1 (True)  | Borrow |
+
+### Order Status Codes
+
+| Status Code | Status                    | Description                           |
+|-------------|---------------------------|---------------------------------------|
+| 0           | STATUS_PENDING            | Pending (i.e. Not yet sent to market) |
+| 1           | STATUS_ONBOOK             | On Book (i.e. Live order in market)   |
+| 10          | STATUS_DONE               | Done (i.e. Fully executed)            |
+| 11          | STATUS_MANUALLY_CANCELLED | Manually cancelled                    |
+| 12          | STATUS_AUTO_CANCELLED     | Auto cancelled                        |
+| 13          | STATUS_PARTIALLY_FILLED   | Partially Filled                      |
+| 14          | STATUS_EXPIRED            | Market expired                        |
+| 99          | STATUS_ERROR              | Error                                 |
+
+### Order Types
+
+| Type Code | Meaning      |
+|-----------|--------------|
+| 1         | Market Order |
+| 2         | Limit Order  |
+
+## Response Codes
+
+| Code | Description                               |
+|------|-------------------------------------------|
+| 200  | OK                                        |
+| 403  | Forbidden                                 |
+| 500  | Internal Server Error or Invalid Response |
+| 503  | Service Unavailable                       |
+
+## Token IDs
+
+| Code | Name        | Token ID | Quantity Step | Minimum Quantity | Rate Step |
+|------|-------------|----------|---------------|------------------|-----------|
+| ETH  | ETH         | 1        | 0.00001       | 0.001            | 0.0001    |
+| USDT | USDT        | 2        | 0.01          | 1                | 0.0001    |
+| USDC | USDC        | 3        | 0.01          | 1                | 0.0001    |
+| DAI  | DAI         | 4        | 0.01          | 1                | 0.0001    |
+| WBTC | Wrapped BTC | 5        | 0.000001      | 0.0001           | 0.0001    |
+
+## Token Valuation Protocols
+
+| Code | Protocol                   |
+|------|----------------------------|
+| 0    | No protocol / Not relevant |
+| 1    | Aave                       |
+| 2    | Uniswap                    |
+| 3    | Compound                   |
+| 4    | Curve                      |
+
+## Transaction Types
+
+| Code | Meaning                        |
+|------|--------------------------------|
+| 1    | Borrow                         |
+| 2    | Lend                           |
+| 3    | Repay                          |
+| 4    | Unlend                         |
+| 5    | Interest                       |
+| 6    | Transfer In (Between Wallets)  |
+| 7    | Transfer Out (Between Wallets) |
+| 8    | External Transfer In           |
+| 9    | External Transfer Out          |
+| 10   | Trade                          |
+| 11   | System Airdrop                 |
+| 12   | LP Fee                         |
+| 13   | Swap Secondary Token           |
+| 14   | Withdrawal Fee                 |
+| 15   | Transaction Fee                |
+| 16   | LP Setup In                    |
+| 17   | LP Setup Out                   |
+| 18   | LP Unwind In                   |
+| 19   | LP Unwind Out                  |
+| 20   | Liquidation Unlend             |
 
 ## Disclaimer
 
