@@ -1813,36 +1813,32 @@ class RestClient:
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
         return self._send_request(is_private=True, method="get", url=url)
 
-    def batch_cancel_fixed_orders(self, client_order_ids: list[str] | None = None, order_ids: list[int] | None = None,
-                                  account_id: int | None = None) -> dict:
+    def batch_cancel_orders(self, instrument_id: str, account_id: int | None = None,
+                            client_order_ids: list[str] | None = None, order_ids: list[int] | None = None) -> dict:
         """
-        Cancel fixed rate order by client order id.
+        Batch cancel multiple orders.
 
-        This cancels a fixed rate order as specified by client order id. Either client order id(s) or exchange order
-        id(s) should be specified, but not both. If both are specified, an exception is raised.
+        This method allows you to cancel multiple orders in a single API call.
+        You need to provide a list of order IDs to cancel.
 
         Args:
-            client_order_ids (list): client order IDs
-            order_ids (list): exchange order IDs
-            account_id (int): Account ID (Default is None.)
+            instrument_id (str): Instrument ID.
+            account_id (int): Account ID. (optional)
+            order_ids (List[int]): A list of exchange order IDs to cancel. (optional if client_order_ids is specified)
+            client_order_ids (List[str]): A list of client order IDs to cancel. (optional if order_ids is specified)
+
 
         Returns:
-            response: Session response from attempting to cancel a fixed rate order. Note a success boolean and empty
-            data dictionary are returned only. For example:
-            {
-                "cancelOrders": [
-                    {
-                        "orderId": 278621255,
-                        "clientOrderId": "6b36e3d2",
-                        "success": "True"
-                    }
-                ]
-            }
+            dict: A dictionary containing the response from the Infinity REST API.
+
+        Raises:
+            Exception: If an error occurs while sending the API request or handling the response.
         """
         if account_id is None:
             account_id = self._account_id
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
-        url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_FIXED_ORDERS_ENDPOINT
+        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id,
+                             constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
+        url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_ORDERS_ENDPOINT
         url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         if client_order_ids is not None and order_ids is not None:
@@ -1857,53 +1853,8 @@ class RestClient:
                 json = {constants.ORDER_IDS: order_ids}
             return self._send_request(is_private=True, method="post", url=url, json=json)
 
-    def batch_cancel_floating_orders(self, client_order_ids: list[str] | None = None,
-                                     order_ids: list[int] | None = None,
-                                     account_id: int | None = None) -> dict:
-        """
-        Cancel floating rate order by client order id.
-
-        This cancels a floating rate order as specified by client order id. Either client order id(s) or exchange order
-        id(s) should be specified, but not both. If both are specified, an exception is raised.
-
-        Args:
-            client_order_ids (list[str]): client order IDs
-            order_ids (list[int]): exchange order IDs
-            account_id (int): Account ID (Default is None.)
-
-        Returns:
-            response: Session response from attempting to cancel a floating rate order. Note a success boolean and empty
-            data dictionary are returned only. For example:
-            {
-                "cancelOrders": [
-                    {
-                        "orderId": 106584050,
-                        "clientOrderId": "d36f2fad",
-                        "success": "True"
-                    }
-                ]
-            }
-        """
-        if account_id is None:
-            account_id = self._account_id
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id}
-        url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_FLOATING_ORDERS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params=dict_query_params)
-
-        if client_order_ids is not None and order_ids is not None:
-            raise InputParameterError("Please only specify client_order_ids or order_ids, not both.")
-        elif client_order_ids is None and order_ids is None:
-            raise InputParameterError("Please specify either client_order_ids or order_ids.")
-        else:
-            json = {}
-            if client_order_ids is not None:
-                json = {constants.CLIENT_ORDER_IDS: client_order_ids}
-            elif order_ids is not None:
-                json = {constants.ORDER_IDS: order_ids}
-            return self._send_request(is_private=True, method="post", url=url, json=json)
-
-    def cancel_order(self, instrument_id: str, order_id: int | None = None, client_order_id: str | None = None,
-                     account_id: int | None = None) -> dict:
+    def cancel_order(self, instrument_id: str, account_id: int | None = None, order_id: int | None = None,
+                     client_order_id: str | None = None) -> dict:
         """
         Cancel an order by order id or client order id.
 
