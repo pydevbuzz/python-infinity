@@ -1836,21 +1836,19 @@ class RestClient:
         """
         if account_id is None:
             account_id = self._account_id
-        dict_query_params = {constants.QUERY_KEY_ACCOUNT_ID: account_id,
-                             constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
         url = self._API_BASE_URL + constants.PRIVATE_BATCH_CANCEL_ORDERS_ENDPOINT
-        url = generate_query_url(url=url, dict_query_params=dict_query_params)
 
         if client_order_ids is not None and order_ids is not None:
             raise InputParameterError("Please only specify client_order_ids or order_ids, not both.")
         elif client_order_ids is None and order_ids is None:
             raise InputParameterError("Please specify either client_order_ids or order_ids.")
         else:
-            json = {}
+            json = {constants.QUERY_KEY_ACCOUNT_ID: account_id,
+                    constants.QUERY_KEY_INSTRUMENT_ID: instrument_id}
             if client_order_ids is not None:
-                json = {constants.CLIENT_ORDER_IDS: client_order_ids}
+                json.update({constants.CLIENT_ORDER_IDS: client_order_ids})
             elif order_ids is not None:
-                json = {constants.ORDER_IDS: order_ids}
+                json.update({constants.ORDER_IDS: order_ids})
             return self._send_request(is_private=True, method="post", url=url, json=json)
 
     def cancel_order(self, instrument_id: str, account_id: int | None = None, order_id: int | None = None,
