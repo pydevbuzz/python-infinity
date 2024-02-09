@@ -47,7 +47,7 @@ For feedback or suggestions, please reach out via one of the contact methods spe
 
 | Release Version | Changelog                                    |
 |-----------------|----------------------------------------------|
-| `0.0.7a1`       | Stable release for testnet (**recommended**) |
+| `0.0.7`         | Stable release for testnet (**recommended**) |
 
 
 ## Documentation
